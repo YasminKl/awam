@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import bgImage from '../../assets/image1.png';
+import bgImage from '../../assets/image2.png';
 
 interface AuthLayoutProps {
   children: ReactNode;
