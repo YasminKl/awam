@@ -28,4 +28,4 @@ export const statusColors: Record<AgendaStatus, { bg: string; text: string; bord
   fait: { bg: '#E4EBDD', text: '#5C7052', border: '#A8B89A', dot: '#5C7052' },
   annule: { bg: '#EDEBE7', text: 'var(--texte-secondaire)', border: 'var(--bordure)', dot: 'var(--texte-secondaire)' },
   reporte: { bg: '#F3E4D8', text: '#A8683F', border: 'var(--accent-chaud)', dot: '#A8683F' },
-}
+};

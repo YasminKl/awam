@@ -2,7 +2,7 @@ import { createContext, ReactNode, useEffect, useState } from 'react';
 import { authService } from '../Services/authService';
 import type { User } from '../types/auth';
 
-export interface AuthContextType { 
+export interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   login: (user: User) => void;
