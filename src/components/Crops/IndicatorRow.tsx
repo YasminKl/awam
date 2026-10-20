@@ -16,14 +16,15 @@ const INDICE_HINT: Record<string, string> = {
  * verdict coloré et rappel du seuil. Tout vient du back.
  */
 export default function IndicatorRow({ indicator }: { indicator: Indicator }) {
-  const style = LEVEL_STYLE[indicator.level] ?? LEVEL_STYLE.normal;
+  // Couleurs partagées avec le reste de l'application (utils/indices.ts)
+  const style = LEVEL_STYLE[indicator.level];
+  // Indice non évalué : sa variation est affichée, mais pas jugée
+  const isInfo = indicator.level === "info";
   const delta = indicator.delta;
   const isPercent = indicator.unit === "%";
   const decimals = isPercent ? 0 : 3;
 
-  // MSI : une HAUSSE est mauvaise, l'inverse des autres indices.
-  // Indice non évalué : la variation est affichée sans couleur de verdict.
-  const isInfo = indicator.level === "info";
+  // MSI : une HAUSSE est mauvaise, l'inverse des autres indices
   const deltaIsBad =
     delta != null && (indicator.name === "MSI" ? delta > 0 : delta < 0);
 
