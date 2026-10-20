@@ -1,4 +1,5 @@
 import type { Crop } from "../../types/crop";
+import { shownStatus } from "../../utils/cropStatus";
 
 const STATUS_LABEL: Record<string, string> = {
   active: "En cours",
@@ -97,8 +98,14 @@ export default function CropInfoTab({ crop, history, onEdit, onDelete }: CropInf
         </div>
         <div style={row}>
           <span style={label}>Statut</span>
-          <span style={{ ...value, color: crop.status === "active" ? "#15803d" : "#6b7280" }}>
-            {STATUS_LABEL[crop.status] ?? crop.status}
+          <span
+            style={{
+              ...value,
+              // Une pérenne récoltée aujourd'hui reste dans son cycle : en vert
+              color: crop.status === "active" ? "#15803d" : "#6b7280",
+            }}
+          >
+            {STATUS_LABEL[shownStatus(crop)] ?? crop.status}
           </span>
         </div>
         <div style={row}>
@@ -117,6 +124,14 @@ export default function CropInfoTab({ crop, history, onEdit, onDelete }: CropInf
           <span style={label}>Récolte réelle</span>
           <span style={value}>{fmtDate(crop.actual_harvest_date)}</span>
         </div>
+        {crop.actual_yield != null && (
+          <div style={row}>
+            <span style={label}>Quantité récoltée</span>
+            <span style={value}>
+              {crop.actual_yield.toLocaleString("fr-FR")} {crop.yield_unit ?? ""}
+            </span>
+          </div>
+        )}
         {crop.is_orchard && (
           <div style={row}>
             <span style={label}>Verger en production</span>

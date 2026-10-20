@@ -1,5 +1,8 @@
 export type CropStatus = "active" | "harvested" | "abandoned";
 
+/** Unité de la production récoltée : kilogrammes ou tonnes */
+export type YieldUnit = "kg" | "t";
+
 export interface Crop {
   id: number;
   parcel_id: number;
@@ -11,6 +14,11 @@ export interface Crop {
   planting_date?: string | null;
   expected_harvest_date?: string | null;
   actual_harvest_date?: string | null;
+  /** Quantité récoltée, exigée par le back quand la culture est récoltée */
+  actual_yield?: number | null;
+  yield_unit?: YieldUnit | null;
+  /** Vrai pour une annuelle (basilic) : sa récolte termine le cycle */
+  is_annual?: boolean;
   density?: number | null;
   /** Arbres fruitiers : le verger produit-il déjà ? */
   in_production: boolean;
@@ -31,6 +39,10 @@ export interface CropCreatePayload {
   in_production?: boolean;
   status?: CropStatus;
   notes?: string | null;
+  // Culture créée déjà récoltée : date et production exigées par le back
+  actual_harvest_date?: string | null;
+  actual_yield?: number | null;
+  yield_unit?: YieldUnit | null;
 }
 
 export interface CropUpdatePayload {
@@ -39,6 +51,8 @@ export interface CropUpdatePayload {
   planting_date?: string | null;
   expected_harvest_date?: string | null;
   actual_harvest_date?: string | null;
+  actual_yield?: number | null;
+  yield_unit?: YieldUnit | null;
   density?: number | null;
   in_production?: boolean;
   status?: CropStatus;
