@@ -1,4 +1,6 @@
-export type CropStatus = "active" | "harvested" | "abandoned";
+/** ended : pérenne en fin de vie, arrachée (avec sa date de fin).
+ *  abandoned : culture qui a échoué avant terme. */
+export type CropStatus = "active" | "harvested" | "abandoned" | "ended";
 
 /** Unité de la production récoltée : kilogrammes ou tonnes */
 export type YieldUnit = "kg" | "t";
@@ -19,6 +21,13 @@ export interface Crop {
   yield_unit?: YieldUnit | null;
   /** Vrai pour une annuelle (basilic) : sa récolte termine le cycle */
   is_annual?: boolean;
+  /** Âge de la plantation, en années */
+  age_years?: number | null;
+  /** Production optimale de l'espèce, ex. « de 3 à 6 ans » */
+  optimal_production?: string | null;
+  /** Message selon l'âge : « info » (jeune) ou « warning » (renouvellement) */
+  lifespan_level?: "info" | "warning" | null;
+  lifespan_note?: string | null;
   density?: number | null;
   /** Arbres fruitiers : le verger produit-il déjà ? */
   in_production: boolean;
@@ -27,6 +36,8 @@ export interface Crop {
   status: CropStatus;
   notes?: string | null;
   created_at?: string | null;
+  /** Date de fin (arrachage) d'une culture « Terminée » */
+  end_date?: string | null;
 }
 
 export interface CropCreatePayload {
@@ -43,6 +54,8 @@ export interface CropCreatePayload {
   actual_harvest_date?: string | null;
   actual_yield?: number | null;
   yield_unit?: YieldUnit | null;
+  /** Date de fin (arrachage) d'une culture « Terminée » */
+  end_date?: string | null;
 }
 
 export interface CropUpdatePayload {
@@ -57,6 +70,8 @@ export interface CropUpdatePayload {
   in_production?: boolean;
   status?: CropStatus;
   notes?: string | null;
+  /** Date de fin (arrachage) d'une culture « Terminée » */
+  end_date?: string | null;
 }
 
 /** Origine d'une variété, pour regrouper la liste. */
