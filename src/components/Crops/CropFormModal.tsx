@@ -58,6 +58,8 @@ interface CropRow {
   harvest_touched: boolean;
   /** Statut affiché à l'ouverture : le statut n'est envoyé que s'il change */
   status_initial: CropStatus;
+  /** Date de fin (arrachage), pour une pérenne « Terminée » */
+  end_date: string;
   notes: string;
   /** Plantation ou « en production » modifiés : récolte prévue à recalculer */
   needs_preview: boolean;
@@ -112,6 +114,7 @@ const newRow = (code: string): CropRow => ({
   yield_unit: "kg",
   harvest_touched: false,
   status_initial: "active",
+  end_date: "",
   notes: "",
   needs_preview: false,
   preview_reason: null,
@@ -132,6 +135,7 @@ const existingRow = (crop: Crop): CropRow => ({
   // Pérenne récoltée aujourd'hui : affichée « Récoltée » ce jour-là
   status: shownStatus(crop),
   status_initial: shownStatus(crop),
+  end_date: crop.end_date ?? "",
   expected_harvest_date: crop.expected_harvest_date ?? "",
   expected_touched: false,
   actual_harvest_date: crop.actual_harvest_date ?? "",
@@ -159,6 +163,7 @@ function rowSummary(row: CropRow, isOrchard: boolean): string {
   if (isOrchard && row.in_production) parts.push("en production");
   if (row.status === "harvested") parts.push("récoltée");
   if (row.status === "abandoned") parts.push("abandonnée");
+  if (row.status === "ended") parts.push("terminée");
   if (row.dirty) parts.push("modifiée");
   return parts.length ? parts.join(" · ") : "à compléter";
 }
@@ -326,8 +331,12 @@ export default function CropFormModal({
         planting_date: row.planting_date,
         in_production: String(row.in_production),
       });
-      // Pérenne « Récoltée » : prochaine récolte, à partir de cette récolte
-      if (harvestedPerennial) params.set("harvest_date", row.actual_harvest_date);
+      // Pérenne déjà récoltée, qu'elle soit « Récoltée » ou de nouveau
+      // « En cours » : la prochaine récolte part de la RÉCOLTE, jamais de la
+      // plantation, exactement comme le calcul du back à l'enregistrement
+      if (perennial && row.actual_harvest_date) {
+        params.set("harvest_date", row.actual_harvest_date);
+      }
       api
         .get<ExpectedHarvestPreview>(`/api/crops/expected-harvest?${params}`)
         .then((p) => done(p.expected_harvest_date ?? "", p.reason))
@@ -382,7 +391,13 @@ export default function CropFormModal({
       const label = speciesByCode(row.code)?.label ?? row.code;
       const yieldValue = toYield(row.actual_yield);
       const problem =
-        row.status === "harvested" && !row.actual_harvest_date
+        row.status === "ended" && !row.end_date
+          ? "indiquez la date de fin de la culture."
+          : row.status === "ended" && row.end_date > todayIso()
+          ? "la date de fin ne peut pas être dans le futur."
+          : row.status === "ended" && row.planting_date && row.end_date < row.planting_date
+          ? "la date de fin ne peut pas précéder la plantation."
+          : row.status === "harvested" && !row.actual_harvest_date
           ? "indiquez la date de récolte réelle."
           : row.status === "harvested" && (yieldValue === null || yieldValue <= 0)
           ? "indiquez la quantité récoltée (nombre supérieur à 0)."
@@ -427,6 +442,8 @@ export default function CropFormModal({
         // « Récoltée » reste active côté back : la récolte ouvre le cycle
         // suivant, affiché « Récoltée » le jour même seulement.
         if (statusChanged) payload.status = row.status;
+        // Culture terminée : sa date de fin (effacée par le back sinon)
+        if (row.status === "ended") payload.end_date = row.end_date || null;
         // Récolte prévue saisie à la main : une annuelle récoltée n'en a
         // plus, une pérenne récoltée garde sa prochaine récolte
         if (row.expected_touched && (!harvested || perennial)) {
@@ -457,6 +474,8 @@ export default function CropFormModal({
             row.expected_touched && (!harvested || speciesByCode(row.code)?.crop_type !== "annual")
               ? row.expected_harvest_date || null
               : undefined,
+          // Culture créée déjà terminée : sa date de fin
+          ...(row.status === "ended" ? { end_date: row.end_date } : {}),
           // Culture créée déjà récoltée : le back exige la date et la
           // production dès la création
           ...(harvested
@@ -633,6 +652,7 @@ export default function CropFormModal({
                 <option value="active">En cours</option>
                 <option value="harvested">Récoltée</option>
                 <option value="abandoned">Abandonnée</option>
+                {perennial && <option value="ended">Terminée (fin de vie)</option>}
               </select>
             </label>
 
@@ -651,17 +671,31 @@ export default function CropFormModal({
                 />
             )}
 
-            <DateField
-              label={harvestedPerennial ? "Prochaine récolte prévue" : "Récolte prévue"}
-              value={row.expected_harvest_date}
-              onChange={(v, valid) => {
-                updateRow(row.key, { expected_harvest_date: v, expected_touched: true });
-                setDate(dateKey("expected_harvest_date"), valid);
-              }}
-              disabled={submitting || (harvested && !perennial)}
-              labelStyle={labelStyle}
-              inputStyle={harvested && !perennial ? disabledFieldStyle : fieldStyle}
-            />
+            {row.status === "ended" ? (
+              <DateField
+                label="Date de fin *"
+                value={row.end_date}
+                onChange={(v, valid) => {
+                  updateRow(row.key, { end_date: v });
+                  setDate(dateKey("end_date"), valid);
+                }}
+                disabled={submitting}
+                labelStyle={labelStyle}
+                inputStyle={fieldStyle}
+              />
+            ) : (
+              <DateField
+                label={harvestedPerennial ? "Prochaine récolte prévue" : "Récolte prévue"}
+                value={row.expected_harvest_date}
+                onChange={(v, valid) => {
+                  updateRow(row.key, { expected_harvest_date: v, expected_touched: true });
+                  setDate(dateKey("expected_harvest_date"), valid);
+                }}
+                disabled={submitting || (harvested && !perennial)}
+                labelStyle={labelStyle}
+                inputStyle={harvested && !perennial ? disabledFieldStyle : fieldStyle}
+              />
+            )}
 
             {!harvested && (
               <label style={labelStyle}>
@@ -716,7 +750,10 @@ export default function CropFormModal({
             )}
 
             <p style={{ ...hintStyle, gridColumn: "1 / -1" }}>
-              {harvestedPerennial
+              {row.status === "ended"
+                ? "Terminée : la plantation est arrivée en fin de vie et a été arrachée. Elle reste dans " +
+                  "l'historique de la parcelle, et l'espèce peut être replantée."
+                : harvestedPerennial
                 ? "Plante pérenne : la récolte ouvre le cycle suivant. Elle est affichée « Récoltée » " +
                   "le jour de la récolte, puis de nouveau « En cours » ; la prochaine récolte est calculée " +
                   "depuis cette date, vous pouvez la corriger."
