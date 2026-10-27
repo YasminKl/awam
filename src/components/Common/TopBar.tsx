@@ -1,19 +1,34 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { useSelection } from "../../hooks/useSelection";
 import { useWeather } from "../../hooks/useWeather";
+import AlertsBell from "./AlertsBell";
 import { weatherCodeToLabel, weatherCodeToIcon } from "../../utils/weatherCodeToLabel";
 
-/** Fil d'Ariane cliquable : Accueil > Ferme > Parcelle */
+/** Nom de chaque page, tel qu'il apparaît dans la barre latérale */
+const PAGE_LABELS: Record<string, string> = {
+  "/": "Fermes",
+  "/cultures": "Cultures",
+  "/employes": "Employés",
+  "/profile": "Profil",
+};
+
+/**
+ * Fil d'Ariane cliquable : Page > Ferme > Parcelle.
+ * Le premier niveau est le nom de la page où l'on se trouve (Fermes,
+ * Cultures, Employés) ; un clic dessus désélectionne ferme et parcelle.
+ */
 function Breadcrumb() {
   const { farms, selectedFarmId, selectedParcel, selectFarm, selectParcel } = useSelection();
+  const { pathname } = useLocation();
   const farm = farms.find((f) => f.id === selectedFarmId);
+  const pageLabel = PAGE_LABELS[pathname.replace(/\/+$/, "") || "/"] ?? "Fermes";
 
   // Chaque niveau ramène à l'étape correspondante de la sélection
   const items: { label: string; onClick: (() => void) | null }[] = [
     {
-      label: "Accueil",
+      label: pageLabel,
       onClick:
         selectedFarmId !== null || selectedParcel
           ? () => {
@@ -254,22 +269,7 @@ export default function TopBar() {
       <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
         <WeatherChip />
 
-        {/* Alertes : branchées plus tard sur /api/parcels/{id}/alerts */}
-        <button
-          type="button"
-          disabled
-          title="Notifications (bientôt disponible)"
-          style={{
-            background: "transparent",
-            border: "none",
-            fontSize: 17,
-            cursor: "not-allowed",
-            opacity: 0.4,
-            padding: 4,
-          }}
-        >
-          🔔
-        </button>
+        <AlertsBell />
 
         <UserMenu />
       </div>
