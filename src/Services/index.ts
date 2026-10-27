@@ -12,3 +12,5 @@ export { indiceService } from "./indiceService";
 export { rasterService } from "./rasterService";
 export { vectorService } from "./vectorService";
 export { weatherService } from "./weatherService";
+export { alertService } from "./alertService";
+export { taskTypeService } from "./taskTypeService";

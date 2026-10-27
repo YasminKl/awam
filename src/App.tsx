@@ -9,6 +9,7 @@ import ProfilePage from './pages/ProfilePage';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 import DashboardPage from './pages/DashboardPage';
 import CropsPage from './pages/CropsPage';
+import EmployeesPage from './pages/EmplyeesPage';
 
 export default function App() {
   return (
@@ -21,9 +22,9 @@ export default function App() {
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/mot-de-passe-oublie" element={<ForgotPasswordPage />} />
             <Route path="/reinitialiser-mot-de-passe/:token" element={<ForgotPasswordPage />} />
-            <Route path="/cultures" element={<ProtectedRoute><CropsPage/></ProtectedRoute>} />   
-            <Route
-              path="/"
+            <Route path="/cultures" element={<ProtectedRoute><CropsPage /></ProtectedRoute>} />
+            <Route path="/employes" element={<ProtectedRoute><EmployeesPage /></ProtectedRoute>} />
+            <Route path="/"
               element={
                 <ProtectedRoute>
                   <DashboardPage />
