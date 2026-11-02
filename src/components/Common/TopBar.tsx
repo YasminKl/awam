@@ -23,14 +23,17 @@ function Breadcrumb() {
   const { farms, selectedFarmId, selectedParcel, selectFarm, selectParcel } = useSelection();
   const { pathname } = useLocation();
   const farm = farms.find((f) => f.id === selectedFarmId);
-  const pageLabel = PAGE_LABELS[pathname.replace(/\/+$/, "") || "/"] ?? "Fermes";
+  const page = pathname.replace(/\/+$/, "") || "/";
+  const pageLabel = PAGE_LABELS[page] ?? "Fermes";
+  /** Pages sans ferme ni parcelle : seulement le nom de la page */
+  const pageOnly = page === "/profile";
 
   // Chaque niveau ramène à l'étape correspondante de la sélection
   const items: { label: string; onClick: (() => void) | null }[] = [
     {
       label: pageLabel,
       onClick:
-        selectedFarmId !== null || selectedParcel
+        !pageOnly && (selectedFarmId !== null || selectedParcel)
           ? () => {
               selectParcel(null);
               selectFarm(null);
@@ -39,14 +42,14 @@ function Breadcrumb() {
     },
   ];
 
-  if (farm) {
+  if (farm && !pageOnly) {
     items.push({
       label: farm.name,
       onClick: selectedParcel ? () => selectParcel(null) : null,
     });
   }
 
-  if (selectedParcel) {
+  if (selectedParcel && !pageOnly) {
     items.push({ label: selectedParcel.nom, onClick: null });
   }
 

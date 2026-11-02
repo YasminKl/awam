@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import Modal from "../Common/Modal";
+import Dialog from "../Common/Dialog";
+import { PEOPLE, dialogButton, dialogCard, dialogInput, dialogLabel, dialogSection } from "../Common/dialogStyles";
 import { activityService } from "../../Services/activityService";
 import { useToast } from "../../hooks/useToast";
 import type { Activity } from "../../types/activity";
 import type { FarmEmployee } from "../../types/farmEmployee";
-import { dayToDateTime, isoDay } from "./planningUtils";
+import { dayToDateTime, isoDay, nowTime } from "./planningUtils";
 
 interface CompleteTaskModalProps {
   isOpen: boolean;
@@ -16,20 +17,17 @@ interface CompleteTaskModalProps {
   onSaved: () => void;
 }
 
-const fieldStyle: React.CSSProperties = {
-  width: "100%", padding: "6px 9px", borderRadius: 6, border: "1px solid #4b5563", marginTop: 3,
-  background: "#111827", color: "#ffffff", fontSize: 13, fontFamily: "inherit", boxSizing: "border-box",
-};
-const labelStyle: React.CSSProperties = { fontSize: 12, color: "#d1d5db", display: "block" };
 
 /**
- * Marquer une tâche réalisée : sa date réelle, et les employés qui l'ont
+ * Marquer une tâche réalisée : sa date et son heure réelles (l'heure
+ * actuelle par défaut), et les employés qui l'ont
  * VRAIMENT faite (ceux prévus sont cochés d'office). « À entretenir » si
  * elle demande encore un suivi.
  */
 export default function CompleteTaskModal({ isOpen, onClose, task, taskLabel, links, onSaved }: CompleteTaskModalProps) {
   const { showToast } = useToast();
   const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
   const [checked, setChecked] = useState<Set<number>>(new Set());
   const [followUp, setFollowUp] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +36,7 @@ export default function CompleteTaskModal({ isOpen, onClose, task, taskLabel, li
   useEffect(() => {
     if (!isOpen || !task) return;
     setDate(isoDay(new Date()));
+    setTime(nowTime());
     setChecked(new Set(task.employees.map((e) => e.id)));
     setFollowUp(false);
     setError(null);
@@ -63,12 +62,14 @@ export default function CompleteTaskModal({ isOpen, onClose, task, taskLabel, li
     if (!task) return;
     if (!date) return setError("Indiquez la date réelle.");
     if (date > isoDay(new Date())) return setError("La date réelle ne peut pas être dans le futur.");
+    if (!time) return setError("Indiquez l'heure de réalisation.");
+    if (date === isoDay(new Date()) && time > nowTime()) return setError("L'heure de réalisation ne peut pas être dans le futur.");
     if (checked.size === 0) return setError("Cochez au moins un employé qui a fait la tâche.");
     setSaving(true);
     setError(null);
     try {
       await activityService.complete(task.id, {
-        performed_at: dayToDateTime(date),
+        performed_at: dayToDateTime(date, time),
         employee_ids: [...checked],
         follow_up: followUp,
       });
@@ -83,43 +84,73 @@ export default function CompleteTaskModal({ isOpen, onClose, task, taskLabel, li
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`Marquer réalisée · ${taskLabel}`}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12, fontFamily: "system-ui, sans-serif", fontSize: 13, color: "#e5e7eb" }}>
-        <label style={labelStyle}>
-          Date réelle *
-          <input type="date" value={date} max={isoDay(new Date())} onChange={(e) => { setDate(e.target.value); setError(null); }} disabled={saving} style={fieldStyle} aria-label="Date réelle" />
-        </label>
+    <Dialog
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Marquer réalisée"
+      subtitle={taskLabel}
+      width={400}
+      footer={
+        <>
+          <button type="button" onClick={onClose} disabled={saving} style={dialogButton.secondary}>
+            Annuler
+          </button>
+          <button type="button" onClick={handleSave} disabled={saving} style={dialogButton.primary}>
+            {saving ? "Enregistrement…" : "✓ Marquer réalisée"}
+          </button>
+        </>
+      }
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 120px", gap: 8 }}>
+          <label style={dialogLabel}>
+            Date réelle *
+            <input type="date" value={date} max={isoDay(new Date())} onChange={(e) => { setDate(e.target.value); setError(null); }} disabled={saving} style={dialogInput} aria-label="Date réelle" />
+          </label>
+          <label style={dialogLabel}>
+            Heure *
+            <input type="time" value={time} onChange={(e) => { setTime(e.target.value); setError(null); }} disabled={saving} style={dialogInput} aria-label="Heure de réalisation" />
+          </label>
+        </div>
 
-        <div>
-          <div style={{ ...labelStyle, marginBottom: 6 }}>Employés qui l'ont faite *</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, maxHeight: 150, overflowY: "auto" }}>
-            {people.map(([id, name]) => (
-              <label key={id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 8px", borderRadius: 6, cursor: "pointer", background: checked.has(id) ? "#1f3a2e" : "#1f2937" }}>
-                <input type="checkbox" checked={checked.has(id)} onChange={() => toggle(id)} disabled={saving} />
-                {name}
-              </label>
-            ))}
+        {/* Employés qui ont vraiment fait la tâche : ceux prévus sont cochés */}
+        <div style={dialogCard(PEOPLE.tint)}>
+          <div style={dialogSection(PEOPLE.text)}><span aria-hidden>👥</span> Employés qui l'ont faite *</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 140, overflowY: "auto" }}>
+            {people.map(([id, name]) => {
+              const on = checked.has(id);
+              return (
+                <label
+                  key={id}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 999, cursor: "pointer",
+                    background: "#fff", border: `1px solid ${on ? PEOPLE.accent : "#d1d5db"}`, fontSize: 12.5, color: "#111827",
+                  }}
+                >
+                  <input type="checkbox" checked={on} onChange={() => toggle(id)} disabled={saving} style={{ accentColor: PEOPLE.accent }} />
+                  {name}
+                </label>
+              );
+            })}
           </div>
         </div>
 
-        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-          <input type="checkbox" checked={followUp} onChange={(e) => setFollowUp(e.target.checked)} disabled={saving} />
+        {/* Suivi : la tâche passera « à entretenir » */}
+        <label
+          style={{
+            ...dialogCard("#FAEEDA"), display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer",
+            fontSize: 12.5, color: "#412402",
+          }}
+        >
+          <input type="checkbox" checked={followUp} onChange={(e) => setFollowUp(e.target.checked)} disabled={saving} style={{ accentColor: "#BA7517", marginTop: 2 }} />
           <span>
-            Demande un suivi <span style={{ color: "#9ca3af" }}>· la tâche passera « à entretenir »</span>
+            <strong>Demande un suivi</strong>
+            <span style={{ display: "block", fontSize: 11.5, color: "#633806" }}>La tâche passera « à entretenir ».</span>
           </span>
         </label>
 
-        {error && <p style={{ color: "#f87171", fontSize: 12, margin: 0 }}>{error}</p>}
-
-        <div style={{ display: "flex", gap: 8 }}>
-          <button type="button" onClick={onClose} disabled={saving} style={{ flex: 1, background: "transparent", color: "#d1d5db", border: "1px solid #4b5563", borderRadius: 6, padding: "8px 0", cursor: "pointer" }}>
-            Annuler
-          </button>
-          <button type="button" onClick={handleSave} disabled={saving} style={{ flex: 1, background: "#16a34a", color: "#fff", border: "none", borderRadius: 6, padding: "8px 0", fontWeight: 600, cursor: saving ? "wait" : "pointer" }}>
-            {saving ? "…" : "Marquer réalisée"}
-          </button>
-        </div>
+        {error && <p style={{ color: "#b91c1c", fontSize: 12.5, margin: 0 }}>{error}</p>}
       </div>
-    </Modal>
+    </Dialog>
   );
 }

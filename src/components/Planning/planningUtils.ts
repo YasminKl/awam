@@ -1,8 +1,27 @@
 import type { Activity } from "../../types/activity";
 
-/** Date du jour d'une tâche : prévue, sinon réelle (AAAA-MM-JJ) */
+/**
+ * Date du jour d'une tâche : prévue, sinon réelle (AAAA-MM-JJ). La date
+ * réelle est lue en heure LOCALE : une tâche faite à 00:30 en Tunisie
+ * reste à sa date, et ne passe pas à la veille (heure universelle).
+ */
 export const taskDay = (a: Activity): string =>
-  a.planned_for ?? (a.performed_at ? a.performed_at.slice(0, 10) : "");
+  a.planned_for ?? (a.performed_at ? isoDay(new Date(a.performed_at)) : "");
+
+/** Heure prévue d'une tâche (HH:MM), sinon vide */
+export const plannedTime = (a: Activity): string => (a.planned_time ? a.planned_time.slice(0, 5) : "");
+
+/** Heure de réalisation d'une tâche faite (HH:MM, heure locale), sinon vide */
+export const doneTime = (a: Activity): string =>
+  a.performed_at
+    ? new Date(a.performed_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
+    : "";
+
+/** Heure actuelle (HH:MM), proposée par défaut comme heure de réalisation */
+export const nowTime = (): string => {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
 
 /** AAAA-MM-JJ en date locale, sans décalage de fuseau */
 export const isoDay = (d: Date): string =>
@@ -25,10 +44,8 @@ export const addDays = (d: Date, n: number): Date => {
 export const shortDay = (iso: string): string =>
   new Date(`${iso}T00:00:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" });
 
-/** Midi du jour choisi, en heure locale, au format ISO avec fuseau */
-export const dayToDateTime = (iso: string): string => new Date(`${iso}T12:00:00`).toISOString();
-
-
+/** Jour et heure choisis (midi par défaut), en heure locale, au format ISO avec fuseau */
+export const dayToDateTime = (iso: string, time = "12:00"): string => new Date(`${iso}T${time}:00`).toISOString();
 // ----------------------------------------------------------------------
 // Calendrier
 // ----------------------------------------------------------------------

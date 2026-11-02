@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { farmEmployeeService } from "../../Services/farmEmployeeService";
-
 import { useToast } from "../../hooks/useToast";
 import type { FarmEmployee } from "../../types/farmEmployee";
 import type { TaskType } from "../../types/taskType";
@@ -29,11 +28,11 @@ const iconButton: React.CSSProperties = {
 
 /**
  * Vue des équipes d'une ferme : une carte par équipe avec ses membres.
- * Chaque équipe, prédéfinie ou libre, a les mêmes actions :
- *   ✎ Modifier  : son nom (équipe libre) et ses membres, à cocher ;
+ * Chaque équipe, prédéfinie ou personnalisée, a les mêmes actions :
+ *   ✎ Modifier  : son nom et ses membres, à cocher ;
  *   🗑 Dissoudre : tous ses membres passent sans équipe dans cette ferme ;
- *                 une équipe libre que plus aucune ferme n'utilise est
- *                 aussi retirée de la liste des types.
+ *                 un nom personnalisé que plus rien ne porte disparaît
+ *                 seul de la liste des types.
  * La ✕ d'un nom retire ce membre d'un seul clic.
  */
 export default function TeamsBoard({ farmId, farmName, links, taskTypes, onChanged }: TeamsBoardProps) {
@@ -42,8 +41,10 @@ export default function TeamsBoard({ farmId, farmName, links, taskTypes, onChang
   const [busy, setBusy] = useState(false);
 
   /**
-   * Équipes formées dans la ferme, dans l'ordre des types de tâche, plus
-   * les types libres encore vides (pour pouvoir les remplir ou les supprimer).
+   * Équipes de la ferme qui ont AU MOINS UN MEMBRE, dans l'ordre des types
+   * de tâche. Une équipe dont on retire le dernier membre disparaît de la
+   * vue ; son nom reste proposé dans « Nouvelle équipe » s'il est encore
+   * utilisé ailleurs (une tâche, une autre ferme).
    */
   const teams = useMemo(() => {
     const members = new Map<string, FarmEmployee[]>();
@@ -54,7 +55,7 @@ export default function TeamsBoard({ farmId, farmName, links, taskTypes, onChang
       else members.set(l.team, [l]);
     }
     const ordered = taskTypes
-      .filter((t) => members.has(t.code) || !t.predefined)
+      .filter((t) => members.has(t.code))
       .map((t) => ({ code: t.code, type: t as TaskType | undefined, members: members.get(t.code) ?? [] }));
     // Équipe dont le type n'est plus dans la liste : affichée quand même
     for (const [code, list] of members) {
@@ -118,7 +119,7 @@ export default function TeamsBoard({ farmId, farmName, links, taskTypes, onChang
         </p>
       )}
 
-     {teams.map(({ code, members }) => (
+      {teams.map(({ code, members }) => (
         <div key={code} style={cardStyle}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: members.length ? 8 : 0 }}>
             <strong style={{ flex: 1, fontSize: 14, color: "#111827" }}>

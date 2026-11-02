@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import Dialog from "../Common/Dialog";
-import { dialogButton, dialogInput, dialogLabel, dialogSection } from "../Common/dialogStyles";
+import { SECTION_TINT, dialogButton, dialogCard, dialogInput, dialogLabel, dialogSection } from "../Common/dialogStyles";
 import CultureSelect from "./CultureSelect";
 import type { DashboardParcel } from "../../types/dashboard";
 import type { GeoJsonGeometry, ParcelUpdatePayload } from "../../types/parcel";
@@ -45,7 +45,7 @@ const EMPTY_FORM: FormState = {
   status: "active",
 };
 
-const twoColumns: React.CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 };
+const twoColumns: React.CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 };
 
 export default function ParcelFormModal({
   isOpen,
@@ -132,7 +132,7 @@ export default function ParcelFormModal({
       onClose={onClose}
       title={isCreate ? "Nouvelle parcelle" : "Modifier la parcelle"}
       subtitle={isCreate ? "Le contour dessiné sur la carte sera enregistré avec elle" : parcel?.nom}
-      width={480}
+      width={430}
       footer={
         <>
           <button type="button" onClick={onClose} disabled={submitting} style={dialogButton.secondary}>
@@ -144,7 +144,7 @@ export default function ParcelFormModal({
         </>
       }
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <label style={dialogLabel}>
           Nom *
           <input
@@ -168,47 +168,49 @@ export default function ParcelFormModal({
           />
         </div>
 
-        <div style={dialogSection("#3B6D11")}><span aria-hidden>🌾</span> Parcelle</div>
-        <div style={twoColumns}>
-          <label style={dialogLabel}>
-            Statut
-            <select
-              value={form.status}
-              onChange={(e) => setForm({ ...form, status: e.target.value as "active" | "inactive" })}
-              disabled={submitting}
-              style={dialogInput}
-            >
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </label>
-          <label style={dialogLabel}>
-            Type de sol
-            <input
-              type="text"
-              value={form.soil_type}
-              onChange={(e) => setForm({ ...form, soil_type: e.target.value })}
-              disabled={submitting}
-              placeholder="Ex. Sableuse"
-              style={dialogInput}
-            />
-          </label>
-          <label style={dialogLabel}>
-            Irrigation
-            <input
-              type="text"
-              value={form.irrigation_type}
-              onChange={(e) => setForm({ ...form, irrigation_type: e.target.value })}
-              disabled={submitting}
-              placeholder="Ex. Goutte-à-goutte"
-              style={dialogInput}
-            />
-          </label>
+        <div style={dialogCard(SECTION_TINT.green)}>
+          <div style={dialogSection("#3B6D11")}><span aria-hidden>🌾</span> Parcelle</div>
+          <div style={twoColumns}>
+            <label style={dialogLabel}>
+              Statut
+              <select
+                value={form.status}
+                onChange={(e) => setForm({ ...form, status: e.target.value as "active" | "inactive" })}
+                disabled={submitting}
+                style={dialogInput}
+              >
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </label>
+            <label style={dialogLabel}>
+              Type de sol
+              <input
+                type="text"
+                value={form.soil_type}
+                onChange={(e) => setForm({ ...form, soil_type: e.target.value })}
+                disabled={submitting}
+                placeholder="Ex. Sableuse"
+                style={dialogInput}
+              />
+            </label>
+            <label style={dialogLabel}>
+              Irrigation
+              <input
+                type="text"
+                value={form.irrigation_type}
+                onChange={(e) => setForm({ ...form, irrigation_type: e.target.value })}
+                disabled={submitting}
+                placeholder="Ex. Goutte-à-goutte"
+                style={dialogInput}
+              />
+            </label>
+          </div>
         </div>
 
         {/* Analyse de laboratoire : facultative, uniquement à la création */}
         {isCreate && (
-          <div style={{ borderTop: "1px solid #eef0ee", paddingTop: 12 }}>
+          <div style={{ borderTop: "1px solid #eef0ee", paddingTop: 10 }}>
             <button
               type="button"
               onClick={() => setShowAnalysis((v) => !v)}
@@ -223,7 +225,7 @@ export default function ParcelFormModal({
               <span style={{ color: "#9ca3af" }}>{showAnalysis ? "▲" : "▼"}</span>
             </button>
             {showAnalysis && (
-              <div style={{ marginTop: 12 }}>
+              <div style={{ marginTop: 10 }}>
                 <AnalysisFields form={analysis} onChange={setAnalysis} disabled={submitting} />
               </div>
             )}

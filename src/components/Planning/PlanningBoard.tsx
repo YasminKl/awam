@@ -10,9 +10,7 @@ import { teamLabel } from "../../utils/teams";
 import CompleteTaskModal from "./CompleteTaskModal";
 import TaskDetailModal from "./TaskDetailModal";
 import TaskFormModal from "./TaskFormModal";
-import {
-  addDays, addMonths, isOverdue, isoDay, mondayOf, monthGrid, monthLabel, shortDay, startOfMonth, taskDay,
-} from "./planningUtils";
+import { addDays, addMonths, doneTime, isoDay, isOverdue, mondayOf, monthGrid, monthLabel, plannedTime, shortDay, startOfMonth, taskDay } from "./planningUtils";
 import { FOLLOW_UP_BORDER, OVERDUE_BORDER, OVERDUE_TEXT, taskStyle } from "./taskStyles";
 
 interface PlanningBoardProps {
@@ -34,6 +32,10 @@ interface TaskList {
   lines: Line[];
   /** Jour concerné, pour « Ajouter » ; absent pour un compteur */
   day?: string;
+  /** Compteur : ses jours, encadrés dans le calendrier */
+  highlight?: string[];
+  /** Compteur « en retard » : jours encadrés en rouge */
+  danger?: boolean;
 }
 
 /** Points de couleur affichés sous un jour, au plus */
@@ -45,6 +47,25 @@ const OVERDUE_LOOKBACK_DAYS = 180;
 /** Vert d'AWAM */
 const GREEN = "#1b4332";
 const LINE = "#e5e7eb";
+
+/**
+ * Jour sélectionné : clair et encadré, dans la couleur de l'état de ses
+ * tâches (priorité : en retard, à entretenir, à réaliser, réalisées).
+ */
+const SELECTED_STYLE = {
+  late: { bg: "#FCEBEB", border: "#E24B4A", text: "#791F1F" },
+  followUp: { bg: "#FAEEDA", border: "#BA7517", text: "#633806" },
+  todo: { bg: "#EAF3DE", border: "#3B6D11", text: "#27500A" },
+  done: { bg: "#f3f4f6", border: "#9ca3af", text: "#374151" },
+};
+
+/** État d'un jour, pour la couleur de sa sélection */
+function dayState(lines: Line[], today: string): keyof typeof SELECTED_STYLE {
+  if (lines.some((l) => isOverdue(l.task, today))) return "late";
+  if (lines.some((l) => l.task.status === "a_entretenir")) return "followUp";
+  if (lines.length > 0 && lines.every((l) => l.task.status === "realisee")) return "done";
+  return "todo";
+}
 
 /** Survol des jours et des tâches : impossible en style en ligne */
 const CALENDAR_CSS = `
@@ -60,8 +81,10 @@ const initials = (name: string) =>
  * Planification d'une parcelle, en deux cartes côte à côte :
  *   - à gauche, le CALENDRIER du mois en tuiles arrondies : sous chaque
  *     numéro, les points de couleur de ses types de tâche et « N tâches »,
- *     ou « En retard » en rouge ; aujourd'hui est encadré de vert, le jour
- *     choisi est en vert plein ;
+ *     ou « En retard » en rouge ; aujourd'hui est encadré de vert ; le jour
+ *     choisi est clair et encadré, dans la couleur de l'état de ses tâches
+ *     (rouge : en retard ; ambre : à entretenir ; vert : à réaliser ;
+ *     gris : toutes réalisées) ;
  *   - à droite, les TÂCHES DU JOUR CHOISI : type, état, culture, équipe et
  *     employés ; ou celles d'un compteur du résumé ;
  *   - en haut, un résumé cliquable : aujourd'hui, en retard, cette semaine.
@@ -170,12 +193,37 @@ export default function PlanningBoard({ parcelId, parcelName, links, taskTypes }
     setSelected(today);
     setTaskList(null);
   };
+  /** Le calendrier passe sur le mois d'un jour, s'il n'y est pas déjà */
+  const showMonthOf = (iso: string) => {
+    const d = new Date(`${iso}T00:00:00`);
+    if (d.getFullYear() !== anchor.getFullYear() || d.getMonth() !== anchor.getMonth()) setAnchor(startOfMonth(d));
+  };
   const selectDay = (iso: string) => {
     setSelected(iso);
     setTaskList(null);
-    // Jour d'un mois voisin : le calendrier passe sur ce mois
-    const d = new Date(`${iso}T00:00:00`);
-    if (d.getMonth() !== anchor.getMonth()) setAnchor(startOfMonth(d));
+    showMonthOf(iso);
+  };
+
+  /**
+   * Clic sur un compteur du résumé (aujourd'hui, en retard, cette semaine) :
+   *   - une seule date : ce jour est sélectionné, comme un clic dans le
+   *     calendrier, qui passe sur son mois ;
+   *   - plusieurs dates : la liste s'affiche à droite, et ces jours sont
+   *     encadrés dans le calendrier, qui passe sur le mois de la plus récente.
+   */
+  const openCounter = (text: string, list: Activity[], danger: boolean) => {
+    const dates = [...new Set(list.map(taskDay))].sort();
+    if (dates.length === 1) {
+      selectDay(dates[0]);
+      return;
+    }
+    setTaskList({
+      title: text.charAt(0).toUpperCase() + text.slice(1),
+      lines: toLines(list, summaryTasks),
+      highlight: dates,
+      danger,
+    });
+    showMonthOf(dates[dates.length - 1]);
   };
 
   // --- Actions -----------------------------------------------------------
@@ -250,10 +298,17 @@ export default function PlanningBoard({ parcelId, parcelName, links, taskTypes }
         <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
           <span style={{ fontSize: 13.5, fontWeight: 600, color: done ? "#9ca3af" : "#111827", textDecoration: done ? "line-through" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {attached && <span style={{ color: "#9ca3af", fontWeight: 400 }}>↳ </span>}
+            {!done && !followUp && plannedTime(task) && (
+              <span style={{ color: "#3B6D11", marginRight: 6 }}>{plannedTime(task)}</span>
+            )}
             {label(task)}
           </span>
           <span style={{ fontSize: 12, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {[crop ?? "Toute la parcelle", task.team ? `Équipe ${teamName(task.team).toLowerCase()}` : null].filter(Boolean).join(" · ")}
+            {[
+              done || followUp ? `Réalisée à ${doneTime(task)}` : null,
+              crop ?? "Toute la parcelle",
+              task.team ? `Équipe ${teamName(task.team).toLowerCase()}` : null,
+            ].filter(Boolean).join(" · ")}
           </span>
         </span>
         {task.employees.length > 0 && (
@@ -293,12 +348,14 @@ export default function PlanningBoard({ parcelId, parcelName, links, taskTypes }
   const counter = (text: string, list: Activity[], danger = false) => (
     <button
       type="button"
-      onClick={() => list.length && setTaskList({ title: text.charAt(0).toUpperCase() + text.slice(1), lines: toLines(list, summaryTasks) })}
+      onClick={() => list.length && openCounter(text, list, danger)}
       disabled={!list.length}
       style={{
         border: "none", background: "transparent", padding: 0, fontSize: 13, cursor: list.length ? "pointer" : "default",
         color: danger && list.length ? OVERDUE_TEXT : "#6b7280", fontWeight: danger && list.length ? 600 : 400,
-        textDecoration: list.length ? "underline" : "none", textUnderlineOffset: 3, textDecorationColor: "#d1d5db",
+        // textDecorationLine (et non textDecoration) : ne pas mêler la forme
+        // générale et la couleur du soulignement, React le signale
+        textDecorationLine: list.length ? "underline" : "none", textUnderlineOffset: 3, textDecorationColor: "#d1d5db",
       }}
     >
       {danger && list.length > 0 && <span aria-hidden style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: OVERDUE_BORDER, marginRight: 5, verticalAlign: 1 }} />}
@@ -362,12 +419,15 @@ export default function PlanningBoard({ parcelId, parcelName, links, taskTypes }
               const iso = isoDay(d);
               const isToday = iso === today;
               const isSelected = !taskList && iso === selected;
+              /** Jour d'un compteur ouvert : encadré, rouge pour « en retard » */
+              const isHighlighted = Boolean(taskList?.highlight?.includes(iso));
               const outside = d.getMonth() !== anchor.getMonth();
               const lines = linesByDay.get(iso) ?? [];
               const count = lines.length;
               const late = lines.some((l) => isOverdue(l.task, today));
               const dots = dotsOf(lines);
               const hint = late ? "En retard" : count ? `${count} tâche${count > 1 ? "s" : ""}` : "";
+              const sel = SELECTED_STYLE[dayState(lines, today)];
               return (
                 <button
                   key={iso}
@@ -379,9 +439,11 @@ export default function PlanningBoard({ parcelId, parcelName, links, taskTypes }
                   style={{
                     height: 58, borderRadius: 10, cursor: "pointer", padding: "6px 4px 5px", minWidth: 0,
                     display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between",
-                    background: isSelected ? GREEN : outside ? "#f9faf9" : count ? "#fff" : "#f3f5f3",
-                    border: isSelected
-                      ? `1px solid ${GREEN}`
+                    background: isSelected ? sel.bg : outside ? "#f9faf9" : count ? "#fff" : "#f3f5f3",
+                    border: isHighlighted
+                      ? `2px solid ${taskList?.danger ? OVERDUE_BORDER : GREEN}`
+                      : isSelected
+                      ? `2px solid ${sel.border}`
                       : isToday
                         ? `2px solid ${GREEN}`
                         : count && !outside
@@ -389,22 +451,22 @@ export default function PlanningBoard({ parcelId, parcelName, links, taskTypes }
                           : "1px solid transparent",
                   }}
                 >
-                  <span style={{ fontSize: 13.5, fontWeight: isToday || isSelected ? 700 : 500, color: isSelected ? "#fff" : outside ? "#c9cdc9" : "#1f2937" }}>
+                  <span style={{ fontSize: 13.5, fontWeight: isToday || isSelected ? 700 : 500, color: isSelected ? sel.text : outside ? "#c9cdc9" : "#1f2937" }}>
                     {d.getDate()}
                   </span>
                   {hint && !outside ? (
                     <span style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
                       <span style={{ display: "flex", gap: 2 }}>
                         {dots.slice(0, MAX_DOTS).map((c) => (
-                          <span key={c} style={{ width: 5, height: 5, borderRadius: "50%", background: isSelected ? "#fff" : c }} />
+                          <span key={c} style={{ width: 5, height: 5, borderRadius: "50%", background: c }} />
                         ))}
                       </span>
-                      <span style={{ fontSize: 10, lineHeight: 1, fontWeight: 600, color: isSelected ? "#d8eadf" : late ? OVERDUE_TEXT : GREEN, whiteSpace: "nowrap" }}>
+                      <span style={{ fontSize: 10, lineHeight: 1, fontWeight: 600, color: isSelected ? sel.text : late ? OVERDUE_TEXT : GREEN, whiteSpace: "nowrap" }}>
                         {hint}
                       </span>
                     </span>
                   ) : (
-                    isToday && !isSelected && <span style={{ fontSize: 10, fontWeight: 600, color: GREEN }}>Aujourd'hui</span>
+                    isToday && <span style={{ fontSize: 10, fontWeight: 600, color: isSelected ? sel.text : GREEN }}>Aujourd'hui</span>
                   )}
                 </button>
               );
@@ -453,8 +515,21 @@ export default function PlanningBoard({ parcelId, parcelName, links, taskTypes }
               {panel.lines.map((line) => (
                 <div key={line.task.id} style={{ display: "flex", gap: 10, alignItems: "stretch" }}>
                   {!panel.day && (
-                    <span style={{ width: 70, flexShrink: 0, fontSize: 11.5, color: "#6b7280", textTransform: "capitalize", paddingTop: 7 }}>
-                      {line.attached ? "" : shortDay(taskDay(line.task))}
+                    <span style={{ width: 70, flexShrink: 0, paddingTop: 7 }}>
+                      {!line.attached && (
+                        <button
+                          type="button"
+                          onClick={() => selectDay(taskDay(line.task))}
+                          title="Voir ce jour dans le calendrier"
+                          style={{
+                            border: "none", background: "transparent", padding: 0, cursor: "pointer", fontFamily: "inherit",
+                            fontSize: 11.5, color: "#1b4332", textDecoration: "underline", textUnderlineOffset: 2,
+                            textTransform: "capitalize",
+                          }}
+                        >
+                          {shortDay(taskDay(line.task))}
+                        </button>
+                      )}
                     </span>
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>{card(line)}</div>
