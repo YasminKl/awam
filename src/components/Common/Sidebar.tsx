@@ -316,6 +316,21 @@ export default function Sidebar({ collapsed, onToggle, onAddFarm }: SidebarProps
           {!collapsed && <span>Employés</span>}
         </button>
         
+        
+        {/* ---- Irrigation ---- */}
+        <button
+          type="button"
+          style={itemStyle(location.pathname === "/irrigation")}
+          onClick={() => navigate("/irrigation")}
+          // Survol ou focus : la page se précharge, le clic l'ouvre aussitôt
+          onMouseEnter={() => preloadPath("/irrigation")}
+          onFocus={() => preloadPath("/irrigation")}
+          title="Irrigation"
+        >
+          <span style={{ fontSize: 17 }}>💧</span>
+          {!collapsed && <span>Irrigation</span>}
+        </button>
+
         {/* ---- Projection climatique ---- */}
         <button
           type="button"

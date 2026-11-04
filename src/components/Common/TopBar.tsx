@@ -13,6 +13,7 @@ const PAGE_LABELS: Record<string, string> = {
   "/employes": "Employés",
   "/profile": "Profil",
   "/climat": "Projection climatique",
+  "/irrigation": "Irrigation",
 };
 
 /**
