@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { preloadPath } from "../../routes/lazyPages";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { useSelection } from "../../hooks/useSelection";
@@ -170,6 +171,8 @@ export default function Sidebar({ collapsed, onToggle, onAddFarm }: SidebarProps
           type="button"
           style={itemStyle(onFarmsPage)}
           onClick={handleFarmsClick}
+          onMouseEnter={() => preloadPath("/")}
+          onFocus={() => preloadPath("/")}
           title="Fermes"
           aria-expanded={showFarms}
         >
@@ -290,6 +293,9 @@ export default function Sidebar({ collapsed, onToggle, onAddFarm }: SidebarProps
           type="button"
           style={itemStyle(location.pathname === "/cultures")}
           onClick={() => navigate("/cultures")}
+          // Survol ou focus : la page se précharge, le clic l'ouvre aussitôt
+          onMouseEnter={() => preloadPath("/cultures")}
+          onFocus={() => preloadPath("/cultures")}
           title="Cultures"
         >
           <span style={{ fontSize: 17 }}>🌿</span>
@@ -301,10 +307,27 @@ export default function Sidebar({ collapsed, onToggle, onAddFarm }: SidebarProps
           type="button"
           style={itemStyle(location.pathname === "/employes")}
           onClick={() => navigate("/employes")}
+          // Survol ou focus : la page se précharge, le clic l'ouvre aussitôt
+          onMouseEnter={() => preloadPath("/employes")}
+          onFocus={() => preloadPath("/employes")}
           title="Employés"
         >
           <span style={{ fontSize: 17 }}>👥</span>
           {!collapsed && <span>Employés</span>}
+        </button>
+        
+        {/* ---- Projection climatique ---- */}
+        <button
+          type="button"
+          style={itemStyle(location.pathname === "/climat")}
+          onClick={() => navigate("/climat")}
+          // Survol ou focus : la page se précharge, le clic l'ouvre aussitôt
+          onMouseEnter={() => preloadPath("/climat")}
+          onFocus={() => preloadPath("/climat")}
+          title="Projection climatique"
+        >
+          <span style={{ fontSize: 17 }}>🌍</span>
+          {!collapsed && <span>Projection climatique</span>}
         </button>
       </nav>
 
@@ -314,6 +337,9 @@ export default function Sidebar({ collapsed, onToggle, onAddFarm }: SidebarProps
           type="button"
           style={itemStyle(location.pathname === "/profile")}
           onClick={() => navigate("/profile")}
+          // Survol ou focus : la page se précharge, le clic l'ouvre aussitôt
+          onMouseEnter={() => preloadPath("/profile")}
+          onFocus={() => preloadPath("/profile")}
           title="Profil"
         >
           <span style={{ fontSize: 16 }}>👤</span>
