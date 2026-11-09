@@ -3,18 +3,20 @@ import DashboardLayout from "../components/Dashboard/DashboardLayout";
 import FarmFormModal from "../components/Dashboard/FarmFormModal";
 import ParcelSelectors from "../components/Dashboard/ParcelSelectors";
 import EquipmentTab from "../components/Irrigation/EquipmentTab";
+import IrrigationHistory from "../components/Irrigation/IrrigationHistory";
+import WaterBalanceTab from "../components/Irrigation/WaterBalanceTab";
+import WateringsTab from "../components/Irrigation/WateringTab";
 import { SelectionProvider } from "../context/SelectionContext";
 import { useSelection } from "../hooks/useSelection";
 
 type Tab = "equipment" | "waterings" | "history" | "follow";
 
-/** Les quatre onglets de l'irrigation ; seuls les équipements sont prêts */
+/** Les quatre onglets de l'irrigation */
 const TABS: { key: Tab; label: string; icon: string; next?: string }[] = [
   { key: "equipment", label: "Équipements", icon: "🔧" },
-  { key: "waterings", label: "Arrosages", icon: "🚿", next: "Planifier et enregistrer les arrosages : date, heure, quantité d'eau et responsables." },
-  { key: "history", label: "Historique", icon: "🕘", next: "Retrouver tous les arrosages, l'eau apportée par semaine et par équipement." },
-  { key: "follow", label: "Suivi", icon: "📊", next: "Comparer l'eau apportée et la pluie au besoin des cultures." },
-];
+  { key: "waterings", label: "Arrosages", icon: "🚿" },
+  { key: "history", label: "Historique", icon: "🕘" },
+  { key: "follow", label: "Suivi", icon: "📊" },];
 
 const card: React.CSSProperties = {
   background: "#ffffff",
@@ -26,7 +28,7 @@ const card: React.CSSProperties = {
 const muted: React.CSSProperties = { fontSize: 13, color: "#6b7280", margin: 0 };
 
 function IrrigationContent({ showFarmForm, onCloseFarmForm }: { showFarmForm: boolean; onCloseFarmForm: () => void }) {
-  const { selectedFarmId, selectedParcel, refreshFarms } = useSelection();
+  const { selectedFarmId, selectedParcel, parcelsForSelectedFarm, refreshFarms } = useSelection();
   const [tab, setTab] = useState<Tab>("equipment");
   const current = TABS.find((t) => t.key === tab)!;
 
@@ -75,12 +77,23 @@ function IrrigationContent({ showFarmForm, onCloseFarmForm }: { showFarmForm: bo
         <div style={card}>
           {!selectedFarmId ? (
             <p style={muted}>Sélectionnez une ferme dans la barre latérale.</p>
+          ) : tab === "history" ? (
+            // L'historique couvre toute la ferme : il a son propre filtre « Parcelle »
+            <IrrigationHistory
+              farmId={selectedFarmId}
+              parcels={parcelsForSelectedFarm}
+              defaultParcelId={selectedParcel?.id ?? null}
+            />
           ) : !selectedParcel ? (
             <p style={muted}>Sélectionnez une parcelle, dans la carte Parcelles à gauche, pour gérer son irrigation.</p>
           ) : current.next ? (
             <p style={muted}>
               <strong style={{ color: "#374151" }}>Prochaine étape.</strong> {current.next}
             </p>
+                    ) : tab === "follow" ? (
+            <WaterBalanceTab parcelId={selectedParcel.id} parcelName={selectedParcel.nom} />
+          ) : tab === "waterings" ? (
+            <WateringsTab parcelId={selectedParcel.id} parcelName={selectedParcel.nom} parcelAreaM2={selectedParcel.surface_m2 || null} />
           ) : (
             <EquipmentTab parcelId={selectedParcel.id} parcelName={selectedParcel.nom} />
           )}

@@ -6,7 +6,6 @@ import EmployeeFormModal from "../components/Employees/EmployeeFormModal";
 import EmployeeInfoTab from "../components/Employees/EmployeeInfoTab";
 import EmployeeTeamTab from "../components/Employees/EmployeeTeamTab";
 import TeamsBoard from "../components/Employees/TeamsBoard";
-import EmployeesHistory from "../components/Employees/EmployeesHistory";
 import EmployeeTasksTab from "../components/Planning/EmployeeTaskTab";
 import PlanningBoard from "../components/Planning/PlanningBoard";
 import { SelectionProvider } from "../context/SelectionContext";
@@ -18,6 +17,8 @@ import { useToast } from "../hooks/useToast";
 import type { FarmEmployee } from "../types/farmEmployee";
 import type { TaskType } from "../types/taskType";
 import { teamLabel } from "../utils/teams";
+import EmployeesHistory from "../components/Employees/EmployeesHistory";
+import { useConfirm } from "../hooks/useConfirm";
 
 
 type TabKey = "info" | "teams" | "planning" | "interventions";
@@ -61,6 +62,7 @@ function EmployeesContent({
 }) {
   const { farms, selectedFarmId, refreshFarms, selectedParcel, parcelsForSelectedFarm } = useSelection();
   const { showToast } = useToast();
+  const confirm = useConfirm();
 
   const [links, setLinks] = useState<FarmEmployee[]>([]);
   const [selectedLinkId, setSelectedLinkId] = useState<number | null>(null);
@@ -147,11 +149,15 @@ function EmployeesContent({
     const deactivate = selected.employee.is_active !== false;
     if (
       deactivate &&
-      !window.confirm(
-        `Rendre ${name} inactif ?\n\nDans toutes vos fermes, il quittera son équipe` +
-          `${selected.role === "coordinateur" ? " et ne sera plus coordinateur" : ""}, et ne recevra plus de nouvelle tâche. ` +
+!(await confirm({
+        title: `Rendre ${name} inactif ?`,
+        message: [
+          `Dans toutes vos fermes, il quittera son équipe${selected.role === "coordinateur" ? " et ne sera plus coordinateur" : ""}, et ne recevra plus de nouvelle tâche.`,
           "Son historique est conservé, et vous pourrez le réactiver.",
-      )
+        ],
+        confirmLabel: "Rendre inactif",
+        tone: "neutral",
+      }))
     ) {
       return;
     }
@@ -167,7 +173,7 @@ function EmployeesContent({
   const handleDelete = async () => {
     if (!selected) return;
     const name = selected.employee.full_name;
-    if (!window.confirm(`Supprimer ${name} ? Il sera retiré de toutes vos fermes.`)) return;
+    if (!(await confirm({ title: `Supprimer ${name} ?`, message: "Il sera retiré de toutes vos fermes." }))) return;
     try {
       await employeeService.remove(selected.employee.id);
       showToast("success", `${name} supprimé.`);

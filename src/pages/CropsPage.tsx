@@ -14,6 +14,7 @@ import { useSelection } from "../hooks/useSelection";
 import { useToast } from "../hooks/useToast";
 import type { Crop, CropObservation } from "../types/crop";
 import type { CropNeeds, Diagnosis, StageTimelineItem } from "../types/diagnosis";
+import { useConfirm } from "../hooks/useConfirm";
 
 type TabKey = "info" | "stages" | "needs";
 
@@ -39,7 +40,7 @@ function CropsContent({
 }) {
   const { selectedParcelId, refreshFarms } = useSelection();
   const { showToast } = useToast();
-
+  const confirm = useConfirm();
   const [crops, setCrops] = useState<Crop[]>([]);
   const [selectedCropId, setSelectedCropId] = useState<number | null>(null);
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
@@ -113,6 +114,11 @@ function CropsContent({
   };
 
   const handleDeleteObservation = async (id: number) => {
+    const obs = observations.find((o) => o.id === id);
+    if (!(await confirm({
+      title: "Supprimer cette observation ?",
+      message: obs ? `« ${obs.content} »` : undefined,
+    }))) return;
     try {
       await cropService.removeObservation(id);
       setObservations((prev) => prev.filter((o) => o.id !== id));
@@ -124,7 +130,7 @@ function CropsContent({
   const handleDeleteCrop = async () => {
     if (!selectedCrop) return;
     const name = selectedCrop.species_label ?? selectedCrop.species;
-    if (!window.confirm(`Supprimer la culture « ${name} » et son historique ?`)) return;
+    if (!(await confirm({ title: `Supprimer la culture « ${name} » ?`, message: "Son historique sera aussi supprimé." }))) return;
     try {
       await cropService.remove(selectedCrop.id);
       showToast("success", "Culture supprimée.");

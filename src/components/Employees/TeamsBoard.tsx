@@ -5,6 +5,8 @@ import type { FarmEmployee } from "../../types/farmEmployee";
 import type { TaskType } from "../../types/taskType";
 import { teamLabel } from "../../utils/teams";
 import TeamMembersModal from "./TeamMembersModal";
+import { useConfirm } from "../../hooks/useConfirm";
+import ActionButton from "../Common/ActionButton";
 
 interface TeamsBoardProps {
   farmId: number;
@@ -28,23 +30,22 @@ const iconButton: React.CSSProperties = {
 
 /**
  * Vue des équipes d'une ferme : une carte par équipe avec ses membres.
- * Chaque équipe, prédéfinie ou personnalisée, a les mêmes actions :
- *   ✎ Modifier  : son nom et ses membres, à cocher ;
+ * Chaque équipe, prédéfinie ou libre, a les mêmes actions :
+ *   ✎ Modifier  : son nom (équipe libre) et ses membres, à cocher ;
  *   🗑 Dissoudre : tous ses membres passent sans équipe dans cette ferme ;
- *                 un nom personnalisé que plus rien ne porte disparaît
- *                 seul de la liste des types.
+ *                 une équipe libre que plus aucune ferme n'utilise est
+ *                 aussi retirée de la liste des types.
  * La ✕ d'un nom retire ce membre d'un seul clic.
  */
 export default function TeamsBoard({ farmId, farmName, links, taskTypes, onChanged }: TeamsBoardProps) {
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const [modalTeam, setModalTeam] = useState<string | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
 
   /**
-   * Équipes de la ferme qui ont AU MOINS UN MEMBRE, dans l'ordre des types
-   * de tâche. Une équipe dont on retire le dernier membre disparaît de la
-   * vue ; son nom reste proposé dans « Nouvelle équipe » s'il est encore
-   * utilisé ailleurs (une tâche, une autre ferme).
+   * Équipes formées dans la ferme, dans l'ordre des types de tâche, plus
+   * les types libres encore vides (pour pouvoir les remplir ou les supprimer).
    */
   const teams = useMemo(() => {
     const members = new Map<string, FarmEmployee[]>();
@@ -55,7 +56,7 @@ export default function TeamsBoard({ farmId, farmName, links, taskTypes, onChang
       else members.set(l.team, [l]);
     }
     const ordered = taskTypes
-      .filter((t) => members.has(t.code))
+      .filter((t) => members.has(t.code) || !t.predefined)
       .map((t) => ({ code: t.code, type: t as TaskType | undefined, members: members.get(t.code) ?? [] }));
     // Équipe dont le type n'est plus dans la liste : affichée quand même
     for (const [code, list] of members) {
@@ -79,19 +80,26 @@ export default function TeamsBoard({ farmId, farmName, links, taskTypes, onChang
     }
   };
 
-  const removeMember = (l: FarmEmployee) =>
+  const removeMember = async (l: FarmEmployee) => {
+    if (!(await confirm({
+      title: `Retirer ${l.employee.full_name} de son équipe ?`,
+      message: "Il reste dans la ferme, sans équipe. Vous pourrez l'ajouter de nouveau à une équipe.",
+      confirmLabel: "Retirer",
+      tone: "neutral",
+    }))) return;
     run(() => farmEmployeeService.assignTeam(farmId, null, [l.id]), `${l.employee.full_name} est maintenant sans équipe.`);
+  };
 
-  const dissolveTeam = (code: string, members: FarmEmployee[]) => {
+    const dissolveTeam = async (code: string, members: FarmEmployee[]) => {
     const label = `Équipe ${teamLabel(code, taskTypes).toLowerCase()}`;
     const detail = members.length
       ? `Ses ${members.length} membre${members.length > 1 ? "s passeront" : " passera"} sans équipe.`
       : "Elle n'a aucun membre.";
-    if (!window.confirm(`Dissoudre ${label} à ${farmName} ?\n\n${detail}`)) return;
+    if (!(await confirm({ title: `Dissoudre l'${label.toLowerCase()} ?`, message: [`Ferme ${farmName}.`, detail], confirmLabel: "Dissoudre" }))) return;
 
     run(async () => {
-      // Un nom personnalisé que plus rien ne porte disparaît seul de la liste
-      if (members.length) await farmEmployeeService.assignTeam(farmId, null, members.map((m) => m.id));
+            // Un nom personnalisé que plus rien ne porte disparaît seul de la liste
+    if (members.length) await farmEmployeeService.assignTeam(farmId, null, members.map((m) => m.id));
     }, `${label} dissoute.`);
   };
 
@@ -136,22 +144,23 @@ export default function TeamsBoard({ farmId, farmName, links, taskTypes, onChang
             >
               ✎ Modifier l'équipe
             </button>
-            <button
+            <ActionButton
               type="button"
               onClick={() => dissolveTeam(code, members)}
+              busyText="Dissolution…"
               disabled={busy}
               style={{ ...iconButton, color: "#b91c1c", borderColor: "#fecaca" }}
               title="Dissoudre l'équipe"
             >
               🗑
-            </button>
+            </ActionButton>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {[...members].sort(byName).map((l) => (
               <span key={l.id} style={chip}>
                 {l.employee.full_name}
                 {l.role === "coordinateur" && <span style={{ fontSize: 11, color: "#6b7280" }}>coordinateur</span>}
-                <button
+                <ActionButton
                   type="button"
                   onClick={() => removeMember(l)}
                   disabled={busy}
@@ -159,7 +168,7 @@ export default function TeamsBoard({ farmId, farmName, links, taskTypes, onChang
                   style={{ border: "none", background: "none", color: "#6b7280", cursor: "pointer", padding: 0, fontSize: 13 }}
                 >
                   ✕
-                </button>
+                </ActionButton>
               </span>
             ))}
           </div>

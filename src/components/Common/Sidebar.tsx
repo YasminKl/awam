@@ -7,6 +7,8 @@ import { useToast } from "../../hooks/useToast";
 import { farmService } from "../../Services/farmService";
 import FarmFormModal from "../Dashboard/FarmFormModal";
 import type { Farm } from "../../types/farm";
+import { useConfirm } from "../../hooks/useConfirm";
+import ActionButton from "./ActionButton";
 
 interface SidebarProps {
   collapsed: boolean;
@@ -22,7 +24,7 @@ interface SidebarProps {
  * supprimer (après confirmation : la suppression efface aussi ses parcelles).
  */
 /** Pages qui affichent le contenu d'une ferme : on y change de ferme sur place */
-const FARM_PAGES = ["/", "/cultures", "/employes"];
+const FARM_PAGES = ["/", "/cultures", "/employes", "/irrigation"];
 
 export default function Sidebar({ collapsed, onToggle, onAddFarm }: SidebarProps) {
   const navigate = useNavigate();
@@ -31,6 +33,7 @@ export default function Sidebar({ collapsed, onToggle, onAddFarm }: SidebarProps
   const { farms, selectedFarmId, selectFarm, parcels, loadingFarms, refreshFarms, refreshParcels } =
     useSelection();
   const { showToast } = useToast();
+  const confirm = useConfirm();
 
   // Ferme ouverte dans le formulaire de modification
   const [editingFarm, setEditingFarm] = useState<Farm | null>(null);
@@ -48,7 +51,7 @@ export default function Sidebar({ collapsed, onToggle, onAddFarm }: SidebarProps
         ? `Ses ${parcelCount} parcelle${parcelCount > 1 ? "s" : ""} seront supprimée${parcelCount > 1 ? "s" : ""}, ` +
           "avec leurs cultures, leurs indices, leur historique et leurs interventions."
         : "Elle ne contient aucune parcelle.";
-    if (!window.confirm(`Supprimer la ferme « ${farm.name} » ?\n\n${detail}\n\nCette action est définitive.`)) {
+    if (!(await confirm({ title: `Supprimer la ferme « ${farm.name} » ?`, message: detail }))) {
       return;
     }
 
@@ -261,7 +264,7 @@ export default function Sidebar({ collapsed, onToggle, onAddFarm }: SidebarProps
                     >
                       ✎
                     </button>
-                    <button
+                    <ActionButton
                       type="button"
                       title={`Supprimer la ferme « ${farm.name} »`}
                       aria-label={`Supprimer la ferme ${farm.name}`}
@@ -269,8 +272,8 @@ export default function Sidebar({ collapsed, onToggle, onAddFarm }: SidebarProps
                       disabled={deleting}
                       style={{ ...actionStyle, color: isActive ? "#fecaca" : "#b42318" }}
                     >
-                      {deleting ? "…" : "🗑"}
-                    </button>
+                      🗑
+                    </ActionButton>
                   </span>
                 </div>
               );

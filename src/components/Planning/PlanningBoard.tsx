@@ -12,6 +12,7 @@ import TaskDetailModal from "./TaskDetailModal";
 import TaskFormModal from "./TaskFormModal";
 import { addDays, addMonths, doneTime, isoDay, isOverdue, mondayOf, monthGrid, monthLabel, plannedTime, shortDay, startOfMonth, taskDay } from "./planningUtils";
 import { FOLLOW_UP_BORDER, OVERDUE_BORDER, OVERDUE_TEXT, taskStyle } from "./taskStyles";
+import { useConfirm } from "../../hooks/useConfirm";
 
 interface PlanningBoardProps {
   parcelId: number;
@@ -94,6 +95,7 @@ const initials = (name: string) =>
  */
 export default function PlanningBoard({ parcelId, parcelName, links, taskTypes }: PlanningBoardProps) {
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const today = isoDay(new Date());
   const weekStart = isoDay(mondayOf(new Date()));
   const weekEnd = isoDay(addDays(mondayOf(new Date()), 6));
@@ -233,8 +235,13 @@ export default function PlanningBoard({ parcelId, parcelName, links, taskTypes }
   };
 
   const remove = async (t: Activity) => {
-    const extra = childrenOf(t).length ? "\n\nSes tâches attachées seront aussi supprimées." : "";
-    if (!window.confirm(`Supprimer la tâche « ${label(t)} » du ${shortDay(taskDay(t))} ?${extra}`)) return;
+    if (!(await confirm({
+      title: `Supprimer la tâche « ${label(t)} » ?`,
+      message: [
+        `Prévue le ${shortDay(taskDay(t))}.`,
+        ...(childrenOf(t).length ? ["Ses tâches attachées seront aussi supprimées."] : []),
+      ],
+    }))) return;
     try {
       await activityService.remove(t.id);
       showToast("success", "Tâche supprimée.");

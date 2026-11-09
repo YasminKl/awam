@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
+import { useConfirm } from "../../hooks/useConfirm";
 import { parcelAnalysisService } from "../../Services/parcelAnalalysisService";
 import { useToast } from "../../hooks/useToast";
 import Dialog from "../Common/Dialog";
+import ActionButton from "../Common/ActionButton";
+import BusyLabel from "../Common/BusyLabel";
+
 import { dialogButton } from "../Common/dialogStyles";
 import AnalysisFields, {
   EMPTY_ANALYSIS_FORM,
@@ -70,6 +74,7 @@ function toForm(a: ParcelAnalysis): AnalysisFormState {
  */
 export default function ParcelAnalysisPanel({ parcelId }: ParcelAnalysisPanelProps) {
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const [analyses, setAnalyses] = useState<ParcelAnalysis[]>([]);
   const [loading, setLoading] = useState(false);
   /** Fenêtre ouverte : ajout d'une analyse, ou modification de l'affichée */
@@ -137,8 +142,10 @@ export default function ParcelAnalysisPanel({ parcelId }: ParcelAnalysisPanelPro
 
   const handleDelete = async () => {
     if (!latest) return;
-    const others = analyses.length > 1 ? "\n\nL'analyse précédente redeviendra celle affichée." : "";
-    if (!window.confirm(`Supprimer l'analyse du ${fmtDate(latest.analyzed_at)} ?${others}`)) return;
+    if (!(await confirm({
+      title: `Supprimer l'analyse du ${fmtDate(latest.analyzed_at)} ?`,
+      message: analyses.length > 1 ? "L'analyse précédente redeviendra celle affichée." : undefined,
+    }))) return;
     try {
       await parcelAnalysisService.remove(latest.id);
       showToast("success", "Analyse supprimée.");
@@ -159,9 +166,9 @@ export default function ParcelAnalysisPanel({ parcelId }: ParcelAnalysisPanelPro
             <button type="button" onClick={openEdit} title="Modifier cette analyse" aria-label="Modifier cette analyse" style={{ ...iconButton, fontSize: 12, color: "#374151" }}>
               ✎
             </button>
-            <button type="button" onClick={handleDelete} title="Supprimer cette analyse" aria-label="Supprimer cette analyse" style={{ ...iconButton, fontSize: 12, color: "#b42318" }}>
+            <ActionButton type="button" onClick={handleDelete} title="Supprimer cette analyse" aria-label="Supprimer cette analyse" style={{ ...iconButton, fontSize: 12, color: "#b42318" }}>
               🗑
-            </button>
+            </ActionButton>
           </>
         )}
       </div>
@@ -201,7 +208,7 @@ export default function ParcelAnalysisPanel({ parcelId }: ParcelAnalysisPanelPro
               Annuler
             </button>
             <button type="button" onClick={handleSave} disabled={saving} style={dialogButton.primary}>
-              {saving ? "Enregistrement…" : "Enregistrer"}
+              <BusyLabel busy={saving} text="Enregistrement…">{"Enregistrer"}</BusyLabel>
             </button>
           </>
         }
