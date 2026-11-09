@@ -8,6 +8,9 @@ import { formatAreaHa, getCentroid } from "../../utils/geo";
 import ParcelFormModal from "./ParcelFormModal";
 import type { ParcelUpdatePayload } from "../../types/parcel";
 import ParcelAnalysisPanel from "./ParcelAnalysisPanel";
+import { useConfirm } from "../../hooks/useConfirm";
+import ActionButton from "../Common/ActionButton";
+import BusyLabel from "../Common/BusyLabel";
 
 /** Libellé affiché pour l'état du traitement satellite. */
 const RASTER_STATUS_LABELS: Record<string, string> = {
@@ -41,6 +44,7 @@ const value: React.CSSProperties = {
 export default function ParcelInfoCard() {
   const { selectedParcel, refreshParcels, selectParcel } = useSelection();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const [showEdit, setShowEdit] = useState(false);
   const [busy, setBusy] = useState(false);
   // État RÉEL de l'analyse : relu quand le back annonce une fin de
@@ -70,7 +74,10 @@ export default function ParcelInfoCard() {
   };
 
   const handleDelete = async () => {
-    if (!window.confirm(`Supprimer définitivement la parcelle « ${selectedParcel.nom} » ?`)) return;
+ if (!(await confirm({
+      title: `Supprimer la parcelle « ${selectedParcel.nom} » ?`,
+      message: "Ses cultures, ses indices, son historique et ses interventions seront aussi supprimés.",
+    }))) return;
     setBusy(true);
     try {
       await parcelService.remove(selectedParcel.id);
@@ -121,9 +128,10 @@ export default function ParcelInfoCard() {
           >
             ✎ Éditer
           </button>
-          <button
+          <ActionButton
             type="button"
             onClick={handleDelete}
+            busyText="Suppression…"
             disabled={busy}
             title="Supprimer la parcelle"
             style={{
@@ -137,7 +145,7 @@ export default function ParcelInfoCard() {
             }}
           >
             🗑
-          </button>
+          </ActionButton>
         </div>
       </div>
 
@@ -220,7 +228,9 @@ export default function ParcelInfoCard() {
             opacity: analysing ? 0.6 : 1,
           }}
         >
-          {busy ? "…" : analysing ? "Analyse en cours…" : "🔄 Rafraîchir les indices"}
+          <BusyLabel busy={busy} text="Lancement de l'analyse…">
+            {analysing ? "Analyse en cours…" : "🔄 Rafraîchir les indices"}
+          </BusyLabel>
         </button>
       )}
       <ParcelAnalysisPanel parcelId={selectedParcel.id} />

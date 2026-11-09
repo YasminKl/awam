@@ -8,6 +8,8 @@ import type { Crop } from "../../types/crop";
 import type { FarmEmployee } from "../../types/farmEmployee";
 import type { TaskType } from "../../types/taskType";
 import { teamLabel } from "../../utils/teams";
+import BusyLabel from "../Common/BusyLabel";
+
 
 interface TaskFormModalProps {
   isOpen: boolean;
@@ -181,8 +183,7 @@ export default function TaskFormModal({
             Annuler
           </button>
           <button type="button" onClick={handleSave} disabled={saving} style={dialogButton.primary}>
-            {saving ? "Enregistrement…" : isEdit ? "Enregistrer" : "Planifier"}
-          </button>
+            <BusyLabel busy={saving} text="Enregistrement…">{isEdit ? "Enregistrer" : "Planifier"}</BusyLabel>          </button>
         </>
       }
     >

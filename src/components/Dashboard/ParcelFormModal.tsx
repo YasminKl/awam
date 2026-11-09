@@ -12,6 +12,9 @@ import AnalysisFields, {
   toAnalysisPayload,
   type AnalysisFormState,
 } from "./AnalysisFields";
+import BusyLabel from "../Common/BusyLabel";
+
+
 
 /**
  * Deux modes :
@@ -139,7 +142,7 @@ export default function ParcelFormModal({
             Annuler
           </button>
           <button type="button" onClick={handleSubmit} disabled={submitting} style={dialogButton.primary}>
-            {submitting ? "Enregistrement…" : "Enregistrer"}
+            <BusyLabel busy={submitting} text="Enregistrement…">{"Enregistrer"}</BusyLabel>
           </button>
         </>
       }
