@@ -24,7 +24,7 @@ interface SidebarProps {
  * supprimer (après confirmation : la suppression efface aussi ses parcelles).
  */
 /** Pages qui affichent le contenu d'une ferme : on y change de ferme sur place */
-const FARM_PAGES = ["/", "/cultures", "/employes", "/irrigation"];
+const FARM_PAGES = ["/", "/cultures", "/employes", "/irrigation", "/climat-cultures"];
 
 export default function Sidebar({ collapsed, onToggle, onAddFarm }: SidebarProps) {
   const navigate = useNavigate();
@@ -330,8 +330,22 @@ export default function Sidebar({ collapsed, onToggle, onAddFarm }: SidebarProps
           onFocus={() => preloadPath("/irrigation")}
           title="Irrigation"
         >
+          
           <span style={{ fontSize: 17 }}>💧</span>
           {!collapsed && <span>Irrigation</span>}
+        </button>
+        
+        {/* ---- Climat et cultures ---- */}
+        <button
+          type="button"
+          style={itemStyle(location.pathname === "/climat-cultures")}
+          onClick={() => navigate("/climat-cultures")}
+          onMouseEnter={() => preloadPath("/climat-cultures")}
+          onFocus={() => preloadPath("/climat-cultures")}
+          title="Climat et cultures"
+        >
+          <span style={{ fontSize: 17 }}>🌦️</span>
+          {!collapsed && <span>Climat et cultures</span>}
         </button>
 
         {/* ---- Projection climatique ---- */}
