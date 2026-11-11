@@ -1,373 +1,869 @@
-import { useState } from "react";
-import StageTimeline from "./StageTimeline";
-import IndicatorRow from "./IndicatorRow";
-import type { Diagnosis, Severity, StageTimelineItem } from "../../types/diagnosis";
-import type { CropObservation } from "../../types/crop";
-import ActionButton from "../Common/ActionButton";
+import { useEffect, useState } from "react";
+import DateField from "../Common/DateField";
+import Dialog from "../Common/Dialog";
+import { SECTION_TINT, dialogButton, dialogCard, dialogInput, dialogLabel, dialogSection } from "../Common/dialogStyles";
+import VarietyField from "./VarietyField";
+import { cropService } from "../../Services/cropService";
+import { api } from "../../Services/api";
+import { useToast } from "../../hooks/useToast";
+import { shownStatus } from "../../utils/cropStatus";
+import { useConfirm } from "../../hooks/useConfirm";
+import BusyLabel from "../Common/BusyLabel";
 
-/** Couleur du bloc d'interprétation selon la gravité. */
-const READING_COLOR: Record<Severity, string> = {
-  normal: "#15803d",
-  watch: "#92400e",
-  alert: "#991b1b",
-  strong_alert: "#7f1d1d",
-};
-const READING_BG: Record<Severity, string> = {
-  normal: "#f0fdf4",
-  watch: "#fffbeb",
-  alert: "#fef2f2",
-  strong_alert: "#fef2f2",
-};
 
-/** Âge lisible à partir du nombre de jours : « 8 mois », « 2 ans ». */
-function formatAge(days: number): string {
-  if (days < 365) {
-    const months = Math.max(1, Math.round(days / 30));
-    return `${months} mois`;
-  }
-  const years = Math.floor(days / 365);
-  return `${years} an${years > 1 ? "s" : ""}`;
-}
+import type {
+  Crop,
+  CropStatus,
+  CropSuggestions,
+  CropUpdatePayload,
+  SpeciesOption,
+  YieldUnit,
+} from "../../types/crop";
 
-/** Bloc d'interprétation : un titre court et une phrase claire. */
-function InterpretationBlock({
-  title,
-  text,
-  color,
-  bg,
-  prefix = "",
-}: {
-  title: string;
-  text?: string | null;
-  color: string;
-  bg: string;
-  prefix?: string;
-}) {
-  if (!text) return null;
-  return (
-    <div
-      style={{
-        background: bg,
-        borderLeft: `3px solid ${color}`,
-        borderRadius: 6,
-        padding: "8px 11px",
-        marginBottom: 7,
-      }}
-    >
-      <div
-        style={{
-          fontSize: 10,
-          fontWeight: 700,
-          color,
-          textTransform: "uppercase",
-          letterSpacing: 0.5,
-          marginBottom: 3,
-        }}
-      >
-        {title}
-      </div>
-      <div style={{ fontSize: 13, color: "#1f2937", lineHeight: 1.45 }}>
-        {prefix}
-        {text}
-      </div>
-    </div>
-  );
-}
-
-interface StagesTabProps {
-  diagnosis: Diagnosis | null;
-  stages: StageTimelineItem[];
-  observations: CropObservation[];
-  onAddObservation: (content: string) => Promise<void>;
-  onDeleteObservation: (id: number) => Promise<void>;
+interface CropFormModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  parcelId: number;
+  /** Culture à ouvrir directement (bouton « Modifier » de la fiche) */
+  crop?: Crop | null;
+  /** Appelé après enregistrement, avec la culture à sélectionner ensuite */
+  onSaved: (cropId?: number) => void | Promise<void>;
 }
 
 /**
- * Onglet Stades : frise du cycle, indices suivis au stade courant avec
- * leur verdict, risques identifiés, et observations de terrain.
+ * Une ligne du formulaire : culture déjà suivie (`id` présent) ou
+ * nouvelle culture à déclarer (`id` absent).
  */
-export default function StagesTab({
-  diagnosis,
-  stages = [],
-  observations = [],
-  onAddObservation,
-  onDeleteObservation,
-}: StagesTabProps) {
-  const [draft, setDraft] = useState("");
-  const [saving, setSaving] = useState(false);
+interface CropRow {
+  /** Clé stable : id de la culture, ou code de l'espèce pour une nouvelle */
+  key: string;
+  id?: number;
+  code: string;
+  /** Nouvelle culture : retenue ou non à l'enregistrement */
+  checked: boolean;
+  /** Culture suivie : marquée pour suppression, appliquée à l'enregistrement */
+  deleted: boolean;
+  /** Culture suivie : modifiée depuis l'ouverture du formulaire */
+  dirty: boolean;
+  variety: string;
+  in_production: boolean;
+  planting_date: string;
+  density: string;
+  status: CropStatus;
+  /** Récolte prévue : TOUJOURS calculée par le back, jamais saisie */
+  expected_harvest_date: string;
+  actual_harvest_date: string;
+  /** Quantité récoltée : obligatoire pour une annuelle « Récoltée »,
+   *  facultative pour la dernière récolte d'une pérenne */
+  actual_yield: string;
+  yield_unit: YieldUnit;
+  /** La récolte (date, quantité) n'est envoyée que si l'utilisateur l'a
+   *  modifiée ou vient de choisir « Récoltée » */
+  harvest_touched: boolean;
+  /** Statut affiché à l'ouverture : le statut n'est envoyé que s'il change */
+  status_initial: CropStatus;
+  /** Date de fin (arrachage), pour une pérenne « Terminée » */
+  end_date: string;
+  notes: string;
+  /** Plantation ou « en production » modifiés : récolte prévue à recalculer */
+  needs_preview: boolean;
+  /** Raison de l'absence de récolte prévue (verger pas en production…) */
+  preview_reason: string | null;
+}
 
-  const submit = async () => {
-    if (!draft.trim() || saving) return;
-    setSaving(true);
+/** Récolte prévue calculée par le back (GET /api/crops/expected-harvest). */
+interface ExpectedHarvestPreview {
+  expected_harvest_date: string | null;
+  reason: string | null;
+}
+
+/** Aujourd'hui au format des champs date (AAAA-MM-JJ). */
+const todayIso = () => new Date().toISOString().slice(0, 10);
+
+/**
+ * Cohérence des dates d'une ligne, mêmes règles que le back
+ * (app/schemas/crop.py, check_crop_dates). Renvoie le message d'erreur, ou null.
+ */
+function datesError(row: CropRow): string | null {
+  if (!row.planting_date) return "la date de plantation est obligatoire.";
+  const today = todayIso();
+  if (row.planting_date > today) return "la date de plantation ne peut pas être dans le futur.";
+  if (row.expected_harvest_date && row.expected_harvest_date < row.planting_date)
+    return "la récolte prévue ne peut pas précéder la plantation.";
+  // Récolte réelle : annuelle « Récoltée » ou dernière récolte d'une pérenne
+  if (row.actual_harvest_date) {
+    if (row.actual_harvest_date > today) return "la récolte réelle ne peut pas être dans le futur.";
+    if (row.actual_harvest_date < row.planting_date)
+      return "la récolte réelle ne peut pas précéder la plantation.";
+  }
+  return null;
+}
+
+/** Ligne d'une nouvelle culture, champs vides. */
+const newRow = (code: string): CropRow => ({
+  key: `new-${code}`,
+  code,
+  checked: true,
+  deleted: false,
+  dirty: false,
+  variety: "",
+  in_production: false,
+  planting_date: "",
+  density: "",
+  status: "active",
+  expected_harvest_date: "",
+  actual_harvest_date: "",
+  actual_yield: "",
+  yield_unit: "kg",
+  harvest_touched: false,
+  status_initial: "active",
+  end_date: "",
+  notes: "",
+  needs_preview: false,
+  preview_reason: null,
+});
+
+/** Ligne d'une culture suivie, champs remplis depuis la base. */
+const existingRow = (crop: Crop): CropRow => ({
+  key: `crop-${crop.id}`,
+  id: crop.id,
+  code: crop.species,
+  checked: true,
+  deleted: false,
+  dirty: false,
+  variety: crop.variety ?? "",
+  in_production: crop.in_production,
+  planting_date: crop.planting_date ?? "",
+  density: crop.density != null ? String(crop.density) : "",
+  // Pérenne récoltée aujourd'hui : affichée « Récoltée » ce jour-là
+  status: shownStatus(crop),
+  status_initial: shownStatus(crop),
+  end_date: crop.end_date ?? "",
+  expected_harvest_date: crop.expected_harvest_date ?? "",
+  actual_harvest_date: crop.actual_harvest_date ?? "",
+  actual_yield: crop.actual_yield != null ? String(crop.actual_yield) : "",
+  yield_unit: crop.yield_unit ?? "kg",
+  harvest_touched: false,
+  notes: crop.notes ?? "",
+  needs_preview: false,
+  preview_reason: null,
+});
+
+/** Mois et année d'une date ISO : « 03/2010 ». */
+const monthYear = (iso: string) => {
+  const [y, m] = iso.split("-");
+  return m && y ? `${m}/${y}` : iso;
+};
+
+/** Résumé d'une culture, affiché quand sa ligne est repliée. */
+function rowSummary(row: CropRow, isOrchard: boolean): string {
+  if (row.deleted) return "sera supprimée à l'enregistrement";
+  if (!row.checked) return "non retenue";
+  const parts: string[] = [];
+  if (row.variety) parts.push(row.variety);
+  if (row.planting_date) parts.push(`plantée ${monthYear(row.planting_date)}`);
+  if (isOrchard && row.in_production) parts.push("en production");
+  if (row.status === "harvested") parts.push("récoltée");
+  if (row.status === "abandoned") parts.push("abandonnée");
+  if (row.status === "ended") parts.push("terminée");
+  if (row.dirty) parts.push("modifiée");
+  return parts.length ? parts.join(" · ") : "à compléter";
+}
+
+const toDensity = (v: string) => (v ? Number(v.replace(",", ".")) : null);
+
+/** Quantité récoltée saisie (virgule acceptée), ou null si vide ou invalide. */
+const toYield = (v: string): number | null => {
+  const n = Number(v.trim().replace(",", "."));
+  return v.trim() && Number.isFinite(n) ? n : null;
+};
+
+const fieldStyle: React.CSSProperties = dialogInput;
+/** Champ en lecture seule (récolte prévue, calculée) : grisé */
+const disabledFieldStyle: React.CSSProperties = {
+  ...dialogInput, background: "#f3f4f6", color: "#6b7280", cursor: "not-allowed",
+};
+const labelStyle: React.CSSProperties = dialogLabel;
+const hintStyle: React.CSSProperties = { fontSize: 11, color: "#6b7280", margin: "3px 0 0" };
+const iconButtonStyle: React.CSSProperties = {
+  background: "none", border: "none", padding: "2px 4px",
+  cursor: "pointer", fontSize: 13, lineHeight: 1,
+};
+
+/**
+ * Gestion des cultures d'une parcelle : création, modification et
+ * suppression dans un seul formulaire.
+ *
+ * - CULTURES SUIVIES : chaque culture existante, avec ✎ pour déplier ses
+ *   champs et 🗑 pour la marquer à supprimer.
+ * - À DÉCLARER : espèces lues sur la parcelle, déjà cochées, et ajout
+ *   d'une autre espèce.
+ *
+ * Une seule ligne est dépliée à la fois, pour garder le formulaire court.
+ * Rien n'est envoyé avant « Enregistrer » : « Annuler » annule tout, y
+ * compris une suppression marquée par erreur.
+ */
+export default function CropFormModal({
+  isOpen,
+  onClose,
+  parcelId,
+  crop = null,
+  onSaved,
+}: CropFormModalProps) {
+  const { showToast } = useToast();
+  const confirm = useConfirm();
+
+  const [species, setSpecies] = useState<SpeciesOption[]>([]);
+  const [suggestions, setSuggestions] = useState<CropSuggestions | null>(null);
+  const [rows, setRows] = useState<CropRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  // Une seule ligne dépliée à la fois : le formulaire reste court
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const [toAdd, setToAdd] = useState("");
+
+  const [invalidDates, setInvalidDates] = useState<Record<string, boolean>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const speciesByCode = (code: string) => species.find((s) => s.code === code);
+
+  // Référentiel : une seule lecture
+  useEffect(() => {
+    if (!isOpen || species.length > 0) return;
+    cropService.listSpecies().then(setSpecies).catch(() => setSpecies([]));
+  }, [isOpen, species.length]);
+
+  // Ouverture : cultures suivies + espèces lues sur la parcelle
+  useEffect(() => {
+    if (!isOpen) return;
+    setError(null);
+    setInvalidDates({});
+    setToAdd("");
+    setRows([]);
+    setSuggestions(null);
+    setLoading(true);
+
+    Promise.all([cropService.listByParcel(parcelId), cropService.suggestions(parcelId)])
+      .then(([crops, s]) => {
+        setSuggestions(s);
+        const existing = crops.map(existingRow);
+        const declared = s.suggested.map(newRow);
+        setRows([...existing, ...declared]);
+        // Ouverture directe d'une culture (fiche) ; sinon la première à déclarer
+        setOpenKey(crop ? `crop-${crop.id}` : declared[0]?.key ?? null);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Chargement impossible."))
+      .finally(() => setLoading(false));
+  }, [isOpen, crop, parcelId]);
+
+  const existing = rows.filter((r) => r.id !== undefined);
+  const declared = rows.filter((r) => r.id === undefined);
+
+  const setDate = (key: string, valid: boolean) =>
+    setInvalidDates((prev) => ({ ...prev, [key]: !valid }));
+
+  /**
+   * Met à jour une ligne ; une culture suivie est alors marquée modifiée.
+   * Si la plantation ou « en production » change, la récolte prévue est
+   * recalculée (sauf si l'utilisateur l'a saisie lui-même).
+   */
+  const updateRow = (key: string, patch: Partial<CropRow>) =>
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.key !== key) return r;
+        const recalc =
+          "planting_date" in patch ||
+          "in_production" in patch ||
+          "actual_harvest_date" in patch ||
+          "status" in patch;
+        return {
+          ...r,
+          ...patch,
+          dirty: r.id !== undefined ? true : r.dirty,
+          needs_preview: recalc ? true : r.needs_preview,
+        };
+      })
+    );
+
+  // Récolte prévue calculée par le back dès la saisie de la plantation.
+  // Elle s'affiche dans le champ, en lecture seule : elle n'est jamais
+  // envoyée, le back recalcule la même à l'enregistrement.
+  useEffect(() => {
+    const pending = rows.filter((r) => r.needs_preview);
+    if (pending.length === 0) return;
+    let cancelled = false;
+
+    pending.forEach((row) => {
+      const done = (date: string, reason: string | null) => {
+        if (cancelled) return;
+        setRows((prev) =>
+          prev.map((r) =>
+            r.key === row.key
+              ? { ...r, expected_harvest_date: date, preview_reason: reason, needs_preview: false }
+              : r
+          )
+        );
+      };
+      const perennial = species.find((s) => s.code === row.code)?.crop_type !== "annual";
+      const harvestedPerennial = row.status === "harvested" && perennial;
+      if (
+        !row.planting_date ||
+        row.planting_date > todayIso() ||
+        (row.status !== "active" && !harvestedPerennial) ||
+        (harvestedPerennial && !row.actual_harvest_date)
+      ) {
+        done("", null);
+        return;
+      }
+      const params = new URLSearchParams({
+        species: row.code,
+        planting_date: row.planting_date,
+        in_production: String(row.in_production),
+      });
+      // Pérenne déjà récoltée, qu'elle soit « Récoltée » ou de nouveau
+      // « En cours » : la prochaine récolte part de la RÉCOLTE, jamais de la
+      // plantation, exactement comme le calcul du back à l'enregistrement
+      if (perennial && row.actual_harvest_date) {
+        params.set("harvest_date", row.actual_harvest_date);
+      }
+      api
+        .get<ExpectedHarvestPreview>(`/api/crops/expected-harvest?${params}`)
+        .then((p) => done(p.expected_harvest_date ?? "", p.reason))
+        .catch(() => done("", null));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [rows, species]);
+
+  const toggleDelete = (row: CropRow) => {
+    setRows((prev) => prev.map((r) => (r.key === row.key ? { ...r, deleted: !r.deleted } : r)));
+    if (!row.deleted && openKey === row.key) setOpenKey(null);
+  };
+
+  // Espèces encore ajoutables : ni déjà listées, ni déjà suivies
+  const addable = species.filter(
+    (s) =>
+      !rows.some((r) => r.code === s.code) &&
+      !(suggestions?.already_active ?? []).includes(s.code)
+  );
+
+  const addSpecies = () => {
+    if (!toAdd) return;
+    const row = newRow(toAdd);
+    setRows((prev) => [...prev, row]);
+    setOpenKey(row.key);
+    setToAdd("");
+  };
+
+  // ------------------------------------------------------------------
+  // Enregistrement : suppressions, modifications, créations
+  // ------------------------------------------------------------------
+  const handleSubmit = async () => {
+    if (Object.values(invalidDates).some(Boolean)) {
+      setError("Une date saisie n'existe pas. Corrigez-la avant d'enregistrer.");
+      return;
+    }
+
+    const toDelete = existing.filter((r) => r.deleted);
+    const toUpdate = existing.filter((r) => !r.deleted && r.dirty);
+    const toCreate = declared.filter((r) => r.checked);
+
+    if (toDelete.length + toUpdate.length + toCreate.length === 0) {
+      setError("Aucune modification à enregistrer.");
+      return;
+    }
+
+    // Champs obligatoires et cohérence des dates, ligne par ligne
+    for (const row of [...toUpdate, ...toCreate]) {
+      const label = speciesByCode(row.code)?.label ?? row.code;
+      const yieldValue = toYield(row.actual_yield);
+      const problem =
+        row.status === "ended" && !row.end_date
+          ? "indiquez la date de fin de la culture."
+          : row.status === "ended" && row.end_date > todayIso()
+          ? "la date de fin ne peut pas être dans le futur."
+          : row.status === "ended" && row.planting_date && row.end_date < row.planting_date
+          ? "la date de fin ne peut pas précéder la plantation."
+          : row.status === "harvested" && !row.actual_harvest_date
+          ? "indiquez la date de récolte réelle."
+          : row.status === "harvested" && (yieldValue === null || yieldValue <= 0)
+          ? "indiquez la quantité récoltée (nombre supérieur à 0)."
+          : datesError(row);
+      if (problem) {
+        setOpenKey(row.key);
+        setError(`${label} : ${problem}`);
+        return;
+      }
+    }
+
+    if (toDelete.length > 0) {
+      const names = toDelete.map((r) => speciesByCode(r.code)?.label ?? r.code).join(", ");
+      const confirmed = await confirm({
+        title: toDelete.length > 1 ? "Supprimer ces cultures ?" : "Supprimer cette culture ?",
+        message: `${names}. ${toDelete.length > 1 ? "Elles seront supprimées" : "Elle sera supprimée"} avec tout son historique.`,
+      });
+      if (!confirmed) return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+    let selectId: number | undefined;
+
     try {
-      await onAddObservation(draft.trim());
-      setDraft("");
+      for (const row of toDelete) {
+        await cropService.remove(row.id!);
+      }
+
+      for (const row of toUpdate) {
+        const harvested = row.status === "harvested";
+        const statusChanged = row.status !== row.status_initial;
+        const payload: CropUpdatePayload = {
+          variety: row.variety.trim() || null,
+          planting_date: row.planting_date || null,
+          density: toDensity(row.density),
+          in_production: speciesByCode(row.code)?.is_orchard ? row.in_production : false,
+          notes: row.notes.trim() || null,
+        };
+        // Le statut n'est envoyé que s'il change. Une pérenne envoyée
+        // « Récoltée » reste active côté back : la récolte ouvre le cycle
+        // suivant, affiché « Récoltée » le jour même seulement.
+        if (statusChanged) payload.status = row.status;
+        // Culture terminée : sa date de fin (effacée par le back sinon)
+        if (row.status === "ended") payload.end_date = row.end_date || null;
+        if (harvested && (row.harvest_touched || statusChanged)) {
+          payload.actual_harvest_date = row.actual_harvest_date || null;
+          payload.actual_yield = toYield(row.actual_yield);
+          payload.yield_unit = row.yield_unit;
+        }
+        const saved = await cropService.update(row.id!, payload);
+        selectId = saved.id;
+      }
+
+      for (const row of toCreate) {
+        const harvested = row.status === "harvested";
+        const created = await cropService.create({
+          parcel_id: parcelId,
+          species: row.code,
+          variety: row.variety.trim() || null,
+          planting_date: row.planting_date || null,
+          density: toDensity(row.density),
+          in_production: speciesByCode(row.code)?.is_orchard ? row.in_production : false,
+          status: row.status,
+          notes: row.notes.trim() || null,
+          // Culture créée déjà terminée : sa date de fin
+          ...(row.status === "ended" ? { end_date: row.end_date } : {}),
+          // Culture créée déjà récoltée : le back exige la date et la
+          // production dès la création
+          ...(harvested
+            ? {
+                actual_harvest_date: row.actual_harvest_date,
+                actual_yield: toYield(row.actual_yield),
+                yield_unit: row.yield_unit,
+              }
+            : {}),
+        });
+        selectId = created.id;
+      }
+
+      const parts: string[] = [];
+      if (toCreate.length) parts.push(`${toCreate.length} créée${toCreate.length > 1 ? "s" : ""}`);
+      if (toUpdate.length) parts.push(`${toUpdate.length} modifiée${toUpdate.length > 1 ? "s" : ""}`);
+      if (toDelete.length) parts.push(`${toDelete.length} supprimée${toDelete.length > 1 ? "s" : ""}`);
+      showToast("success", `Cultures : ${parts.join(", ")}.`);
+
+      await onSaved(selectId);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Une erreur est survenue.");
     } finally {
-      setSaving(false);
+      setSubmitting(false);
     }
   };
 
-  const indicators = diagnosis?.indicators ?? [];
-  const risks = diagnosis?.risks ?? [];
-  const days = diagnosis?.stage?.days_since_planting ?? null;
+  // ------------------------------------------------------------------
+  // Rendu d'une ligne (culture suivie ou à déclarer)
+  // ------------------------------------------------------------------
+  const renderRow = (row: CropRow) => {
+    const spec = speciesByCode(row.code);
+    const isExisting = row.id !== undefined;
+    const active = isExisting ? !row.deleted : row.checked;
+    const isOpen = openKey === row.key && active;
+    const harvested = row.status === "harvested";
+    // Pérenne « Récoltée » : sa récolte ouvre le cycle suivant
+    const perennial = spec?.crop_type !== "annual";
+    const harvestedPerennial = harvested && perennial;
+    const dateKey = (field: string) => `${row.key}.${field}`;
 
-  return (
-    <div style={{ fontFamily: "system-ui, sans-serif" }} translate="no">
-      <StageTimeline stages={stages} />
-
-      {diagnosis?.stage && (
-        <>
-          {/* ---- En-tête du stade : nom, période, âge ---- */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "baseline",
-              gap: 10,
-              margin: "14px 0 8px",
-              flexWrap: "wrap",
-            }}
-          >
-            <strong style={{ fontSize: 14, color: "#111827" }}>
-              {diagnosis.stage.label}
-            </strong>
-            {diagnosis.stage.period ? (
-              <span style={{ fontSize: 11, color: "#6b7280" }}>
-                {diagnosis.stage.period}
-              </span>
-            ) : null}
-            <span style={{ fontSize: 11, color: "#6b7280", marginLeft: "auto" }}>
-              {days != null
-                ? `${formatAge(days)} depuis la plantation`
-                : "Date de plantation non renseignée"}
-            </span>
-          </div>
-
-          {/* ---- Date de plantation manquante ---- */}
-          {days == null && (
-            <div
-              style={{
-                background: "#fffbeb",
-                border: "1px solid #fcd34d",
-                borderRadius: 7,
-                padding: "8px 11px",
-                fontSize: 12,
-                color: "#92400e",
-                marginBottom: 10,
-                lineHeight: 1.45,
-              }}
-            >
-              Les seuils de ce stade dépendent de l'âge des arbres. Sans date de
-              plantation, la tranche la plus large est appliquée. Renseignez-la
-              dans l'onglet Fiche pour un diagnostic précis.
-            </div>
-          )}
-
-          {/* ---- Coupe ou récolte en cours ---- */}
-          {diagnosis.cultural_drop && (
-            <div
-              style={{
-                background: "#f8fafc",
-                border: "1px solid #cbd5e1",
-                borderRadius: 7,
-                padding: "8px 11px",
-                fontSize: 12,
-                color: "#475569",
-                marginBottom: 10,
-                lineHeight: 1.45,
-              }}
-            >
-              Une opération culturale (coupe ou récolte) explique la baisse des
-              indices à ce stade. Aucune alerte n'est levée.
-            </div>
-          )}
-
-          {indicators.length === 0 ? (
-            <p style={{ fontSize: 13, color: "#6b7280" }}>
-              Aucune mesure satellite disponible pour cette parcelle.
-            </p>
-          ) : (
-            <>
-              {/* ---- Indices du stade ---- */}
-              <div style={{ borderTop: "1px solid #e5e7eb" }}>
-                {indicators.map((indicator) => (
-                  <IndicatorRow key={indicator.name} indicator={indicator} />
-                ))}
-              </div>
-
-              {/* ---- Légende des couleurs ---- */}
-              <div
-                style={{
-                  display: "flex",
-                  gap: 14,
-                  fontSize: 11,
-                  color: "#6b7280",
-                  margin: "7px 0 12px",
-                  flexWrap: "wrap",
-                }}
-              >
-                <span>
-                  <span style={{ color: "#b42318" }}>●</span>
-                  <span> Faible : à vérifier</span>
-                </span>
-                <span>
-                  <span style={{ color: "#15803d" }}>●</span>
-                  <span> Normal</span>
-                </span>
-                <span>
-                  <span style={{ color: "#1d4ed8" }}>●</span>
-                  <span> Excellent</span>
-                </span>
-              </div>
-
-              {/* ---- Lecture globale des mesures ---- */}
-              <InterpretationBlock
-                title="Ce que montrent les mesures"
-                text={diagnosis.reading}
-                color={READING_COLOR[diagnosis.severity] ?? "#475569"}
-                bg={READING_BG[diagnosis.severity] ?? "#f8fafc"}
-              />
-
-              {/* ---- Risques identifiés ---- */}
-              {risks.map((risk, i) => (
-                <div
-                  key={`${risk.severity}-${i}`}
-                  style={{ marginBottom: 10 }}
-                >
-                  <InterpretationBlock
-                    title="Risque identifié"
-                    text={risk.diagnosis}
-                    color={READING_COLOR[risk.severity] ?? "#475569"}
-                    bg={READING_BG[risk.severity] ?? "#f8fafc"}
-                  />
-                  <InterpretationBlock
-                    title="À vérifier sur le terrain"
-                    text={risk.measure}
-                    color="#475569"
-                    bg="#f8fafc"
-                  />
-                  <InterpretationBlock
-                    title="Ce qu'il faut faire"
-                    text={risk.action}
-                    color="#1b4332"
-                    bg="#f0fdf4"
-                    prefix="→ "
-                  />
-                </div>
-              ))}
-            </>
-          )}
-        </>
-      )}
-
-      {/* ---- Observations de terrain ---- */}
+    return (
       <div
+        key={row.key}
         style={{
-          marginTop: 16,
-          borderTop: "1px solid #e5e7eb",
-          paddingTop: 10,
+          border: `1px solid ${row.deleted ? "#fecaca" : isOpen ? "#b9d8c4" : "#e5e7eb"}`,
+          borderRadius: 8,
+          background: row.deleted ? "#fef2f2" : "#fff",
+          opacity: active || row.deleted ? 1 : 0.6,
         }}
       >
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            color: "#6b7280",
-            textTransform: "uppercase",
-            letterSpacing: 0.5,
-            marginBottom: 7,
-          }}
-        >
-          Observations de terrain
-        </div>
+        {/* ---- Ligne résumée ---- */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 9px" }}>
+          {!isExisting && (
+            <input
+              type="checkbox"
+              checked={row.checked}
+              onChange={(e) => {
+                setRows((prev) =>
+                  prev.map((r) => (r.key === row.key ? { ...r, checked: e.target.checked } : r))
+                );
+                if (!e.target.checked && openKey === row.key) setOpenKey(null);
+              }}
+              disabled={submitting}
+              style={{ accentColor: "#1b4332" }}
+            />
+          )}
 
-        <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-          <input
-            type="text"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void submit();
-            }}
-            disabled={saving}
-            placeholder="Ce que vous constatez sur place…"
-            style={{
-              flex: 1,
-              padding: "7px 10px",
-              borderRadius: 6,
-              border: "1px solid #d1d5db",
-              fontSize: 13,
-              fontFamily: "inherit",
-            }}
-          />
           <button
             type="button"
-            onClick={() => void submit()}
-            disabled={saving || !draft.trim()}
+            onClick={() => active && setOpenKey(isOpen ? null : row.key)}
+            disabled={!active}
             style={{
-              padding: "7px 14px",
-              borderRadius: 6,
-              border: "none",
-              background: "#1b4332",
-              color: "#ffffff",
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: saving || !draft.trim() ? "not-allowed" : "pointer",
-              opacity: saving || !draft.trim() ? 0.5 : 1,
+              flex: 1, display: "flex", alignItems: "center", gap: 8,
+              background: "none", border: "none", padding: 0, minWidth: 0,
+              color: "#111827", cursor: active ? "pointer" : "default",
+              textAlign: "left", fontFamily: "inherit",
             }}
           >
-            Ajouter
-          </button>
-        </div>
-
-        {observations.length === 0 && (
-          <p style={{ fontSize: 12, color: "#6b7280", margin: 0 }}>
-            Aucune observation enregistrée.
-          </p>
-        )}
-
-        {observations.map((o) => (
-          <div
-            key={o.id}
-            style={{
-              display: "flex",
-              gap: 10,
-              alignItems: "flex-start",
-              fontSize: 12,
-              color: "#374151",
-              padding: "5px 0",
-              borderBottom: "1px solid #f1f3f5",
-            }}
-          >
-            <span style={{ color: "#6b7280", flexShrink: 0, minWidth: 48 }}>
-              {new Date(o.observed_at).toLocaleDateString("fr-FR", {
-                day: "2-digit",
-                month: "2-digit",
-              })}
-            </span>
-            <span style={{ flex: 1 }}>
-              {o.content}
-              {o.stage_label ? (
-                <span style={{ color: "#9ca3af" }}> · {o.stage_label}</span>
-              ) : null}
-            </span>
-            <ActionButton
-              type="button"
-              onClick={() => onDeleteObservation(o.id)}
-              title="Supprimer"
-              aria-label="Supprimer cette observation"
+            <strong
               style={{
-                background: "none",
-                border: "none",
-                color: "#b42318",
-                cursor: "pointer",
-                padding: 0,
+                fontSize: 13, flexShrink: 0,
+                textDecoration: row.deleted ? "line-through" : "none",
               }}
             >
-              ×
-            </ActionButton>
+              {spec?.label ?? row.code}
+            </strong>
+            <span
+              style={{
+                fontSize: 11, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                color: row.deleted ? "#b91c1c" : row.dirty ? "#b45309" : "#6b7280",
+              }}
+            >
+              {rowSummary(row, Boolean(spec?.is_orchard))}
+            </span>
+            {!isExisting && active && (
+              <span style={{ fontSize: 11, color: "#6b7280" }}>{isOpen ? "▾" : "▸"}</span>
+            )}
+          </button>
+
+          {/* Culture suivie : modifier / supprimer */}
+          {isExisting && (
+            <>
+              {!row.deleted && (
+                <button
+                  type="button"
+                  onClick={() => setOpenKey(isOpen ? null : row.key)}
+                  disabled={submitting}
+                  title={isOpen ? "Replier" : "Modifier"}
+                  style={{ ...iconButtonStyle, color: isOpen ? "#111827" : "#6b7280" }}
+                >
+                  {isOpen ? "▾" : "✎"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => toggleDelete(row)}
+                disabled={submitting}
+                title={row.deleted ? "Annuler la suppression" : "Supprimer"}
+                style={{ ...iconButtonStyle, color: row.deleted ? "#374151" : "#b91c1c", fontSize: row.deleted ? 11 : 13 }}
+              >
+                {row.deleted ? "Annuler" : "🗑"}
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* ---- Champs de la culture, uniquement si dépliée ---- */}
+        {isOpen && (
+          <div style={{ padding: "0 9px 9px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 }}>
+            <label style={labelStyle}>
+              Variété
+              <VarietyField
+                varieties={spec?.varieties ?? []}
+                value={row.variety}
+                onChange={(v) => updateRow(row.key, { variety: v })}
+                disabled={submitting}
+                style={fieldStyle}
+              />
+            </label>
+
+            <label style={labelStyle}>
+              Densité (plants/ha)
+              <input
+                type="number"
+                value={row.density}
+                onChange={(e) => updateRow(row.key, { density: e.target.value })}
+                disabled={submitting}
+                placeholder="Ex. 8000"
+                style={fieldStyle}
+              />
+            </label>
+
+            <DateField
+              label="Date de plantation *"
+              value={row.planting_date}
+              onChange={(v, valid) => {
+                updateRow(row.key, { planting_date: v });
+                setDate(dateKey("planting_date"), valid);
+              }}
+              disabled={submitting}
+              labelStyle={labelStyle}
+              inputStyle={fieldStyle}
+            />
+
+            <label style={labelStyle}>
+              Statut
+              <select
+                value={row.status}
+                onChange={(e) => updateRow(row.key, { status: e.target.value as CropStatus })}
+                disabled={submitting}
+                style={fieldStyle}
+              >
+                <option value="active">En cours</option>
+                <option value="harvested">Récoltée</option>
+                <option value="abandoned">Abandonnée</option>
+                {perennial && <option value="ended">Terminée (fin de vie)</option>}
+              </select>
+            </label>
+
+            {/* Récoltée : la date de récolte d'abord, elle calcule la récolte suivante */}
+            {harvested && (
+                <DateField
+                  label="Date de récolte *"
+                  value={row.actual_harvest_date}
+                  onChange={(v, valid) => {
+                    updateRow(row.key, { actual_harvest_date: v, harvest_touched: true });
+                    setDate(dateKey("actual_harvest_date"), valid);
+                  }}
+                  disabled={submitting}
+                  labelStyle={labelStyle}
+                  inputStyle={fieldStyle}
+                />
+            )}
+
+            {row.status === "ended" ? (
+              <DateField
+                label="Date de fin *"
+                value={row.end_date}
+                onChange={(v, valid) => {
+                  updateRow(row.key, { end_date: v });
+                  setDate(dateKey("end_date"), valid);
+                }}
+                disabled={submitting}
+                labelStyle={labelStyle}
+                inputStyle={fieldStyle}
+              />
+            ) : (
+              <DateField
+                label={`${harvestedPerennial ? "Prochaine récolte prévue" : "Récolte prévue"} · calculée`}
+                value={row.expected_harvest_date}
+                onChange={() => {
+                  /* Lecture seule : la récolte prévue est toujours calculée */
+                }}
+                disabled
+                labelStyle={labelStyle}
+                inputStyle={disabledFieldStyle}
+              />
+            )}
+
+            {!harvested && (
+              <label style={labelStyle}>
+                Notes
+                <input
+                  type="text"
+                  value={row.notes}
+                  onChange={(e) => updateRow(row.key, { notes: e.target.value })}
+                  disabled={submitting}
+                  style={fieldStyle}
+                />
+              </label>
+            )}
+
+            {harvested && (
+              <label style={labelStyle}>
+                Quantité récoltée *
+                <span style={{ display: "flex", gap: 6 }}>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="ex. 300"
+                    value={row.actual_yield}
+                    onChange={(e) => updateRow(row.key, { actual_yield: e.target.value, harvest_touched: true })}
+                    disabled={submitting}
+                    style={{ ...fieldStyle, flex: 1, minWidth: 0 }}
+                  />
+                  <select
+                    value={row.yield_unit}
+                    onChange={(e) =>
+                      updateRow(row.key, { yield_unit: e.target.value as YieldUnit, harvest_touched: true })
+                    }
+                    disabled={submitting}
+                    style={{ ...fieldStyle, width: 70 }}
+                    aria-label="Unité de la quantité récoltée"
+                  >
+                    <option value="kg">kg</option>
+                    <option value="t">t</option>
+                  </select>
+                </span>
+              </label>
+            )}
+
+            {spec?.is_orchard && (
+              <div style={{ gridColumn: "1 / -1" }}>
+                <OrchardCheckbox
+                  checked={row.in_production}
+                  onChange={(v) => updateRow(row.key, { in_production: v })}
+                  disabled={submitting}
+                />
+              </div>
+            )}
+
+            <p style={{ ...hintStyle, gridColumn: "1 / -1" }}>
+              {row.status === "ended"
+                ? "Terminée : la plantation est arrivée en fin de vie et a été arrachée. Elle reste dans " +
+                  "l'historique de la parcelle, et l'espèce peut être replantée."
+                : harvestedPerennial
+                ? "Plante pérenne : la récolte ouvre le cycle suivant. Elle est affichée « Récoltée » " +
+                  "le jour de la récolte, puis de nouveau « En cours » ; la prochaine récolte est calculée " +
+                  "automatiquement depuis cette date."
+                : harvested
+                ? "Récoltée : le cycle de cette culture annuelle est terminé."
+                : row.preview_reason
+                  ? row.preview_reason
+                  : "* Obligatoire. Une date approximative suffit (ex. 1er janvier de l'année de plantation). " +
+                    "La récolte prévue se calcule automatiquement depuis cette date."}
+            </p>
           </div>
-        ))}
+        )}
       </div>
-    </div>
+    );
+  };
+
+  const title = `Cultures de ${suggestions?.parcel_name ?? "la parcelle"}`;
+
+  return (
+    <Dialog
+      isOpen={isOpen}
+      onClose={onClose}
+      title={title}
+      subtitle="Modifier, supprimer ou déclarer les cultures de la parcelle"
+      width={460}
+      footer={
+        <>
+          <button type="button" onClick={onClose} disabled={submitting} style={dialogButton.secondary}>
+            Annuler
+          </button>
+          <button type="button" onClick={handleSubmit} disabled={submitting || loading} style={dialogButton.primary}>
+            <BusyLabel busy={submitting} text="Enregistrement…">{"Enregistrer"}</BusyLabel>
+          </button>
+        </>
+      }
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {loading && <p style={hintStyle}>Chargement des cultures de la parcelle…</p>}
+
+        {/* ---- Cultures suivies : modifier / supprimer ---- */}
+        {!loading && existing.length > 0 && (
+          <div style={{ ...dialogCard(SECTION_TINT.green), display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={dialogSection("#3B6D11")}><span aria-hidden>🌿</span> Cultures suivies</div>
+            {existing.map(renderRow)}
+          </div>
+        )}
+
+        {/* ---- À déclarer : création ---- */}
+        {!loading && (
+          <div style={{ ...dialogCard("#f6f7f6"), display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={dialogSection("#374151")}><span aria-hidden>🌱</span> À déclarer</div>
+
+            {declared.length === 0 && (
+              <p style={{ ...hintStyle, margin: 0 }}>
+                Aucune nouvelle culture lue sur la parcelle. Ajoutez une espèce ci-dessous.
+              </p>
+            )}
+            {declared.map(renderRow)}
+
+            {addable.length > 0 && (
+              <div style={{ display: "flex", gap: 6 }}>
+                <select
+                  value={toAdd}
+                  onChange={(e) => setToAdd(e.target.value)}
+                  disabled={submitting}
+                  style={{ ...fieldStyle, flex: 1 }}
+                >
+                  <option value="">Ajouter une espèce…</option>
+                  {addable.map((s) => (
+                    <option key={s.code} value={s.code}>{s.label}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={addSpecies}
+                  disabled={!toAdd || submitting}
+                  title="Ajouter cette espèce"
+                  style={{
+                    marginTop: 3, padding: "0 12px", borderRadius: 7, border: "none",
+                    background: "#1b4332", color: "#ffffff", fontWeight: 600,
+                    cursor: toAdd ? "pointer" : "not-allowed", opacity: toAdd ? 1 : 0.4,
+                  }}
+                >
+                  ＋
+                </button>
+              </div>
+            )}
+
+            {suggestions && suggestions.unknown.length > 0 && (
+              <p style={{ ...hintStyle, color: "#b45309", margin: 0 }}>
+                Non reconnues dans le référentiel : {suggestions.unknown.join(", ")}
+              </p>
+            )}
+          </div>
+        )}
+
+        {error && <p style={{ color: "#b91c1c", fontSize: 12.5, margin: 0 }}>{error}</p>}
+      </div>
+    </Dialog>
+  );
+}
+
+/** Case « Verger en production », réservée aux arbres fruitiers. */
+function OrchardCheckbox({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  disabled: boolean;
+}) {
+  return (
+    <label
+      style={{
+        display: "flex", alignItems: "flex-start", gap: 8,
+        fontSize: 12, color: "#374151", cursor: "pointer",
+      }}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        disabled={disabled}
+        style={{ marginTop: 2, accentColor: "#1b4332" }}
+      />
+      <span>
+        Verger en production
+        <span style={{ display: "block", fontSize: 11, color: "#6b7280" }}>
+          Cochez si les arbres donnent déjà une récolte.
+        </span>
+      </span>
+    </label>
   );
 }
