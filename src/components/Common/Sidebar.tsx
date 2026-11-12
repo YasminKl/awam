@@ -348,6 +348,20 @@ export default function Sidebar({ collapsed, onToggle, onAddFarm }: SidebarProps
           {!collapsed && <span>Climat et cultures</span>}
         </button>
 
+        
+        {/* ---- Alertes ---- */}
+        <button
+          type="button"
+          style={itemStyle(location.pathname === "/alertes")}
+          onClick={() => navigate("/alertes")}
+          onMouseEnter={() => preloadPath("/alertes")}
+          onFocus={() => preloadPath("/alertes")}
+          title="Alertes"
+        >
+          <span style={{ fontSize: 17 }}>🔔</span>
+          {!collapsed && <span>Alertes</span>}
+        </button>
+
         {/* ---- Projection climatique ---- */}
         <button
           type="button"

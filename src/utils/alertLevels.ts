@@ -19,6 +19,8 @@ export const ALERT_LEVEL_STYLE: Record<string, AlertLevelStyle> = {
   alert: { color: "#c2410c", bg: "#fff7ed", symbol: "!" },
   watch: { color: "#a16207", bg: "#fefce8", symbol: "•" },
   normal: { color: "#15803d", bg: "#f0fdf4", symbol: "✓" },
+  // Alerte d'eau : mêmes couleurs que « besoin non couvert » du Suivi de l'irrigation
+  besoin_non_couvert: { color: "#633806", bg: "#FAEEDA", symbol: "💧" },
 };
 
 /** Ce que le satellite a réellement confirmé, pour chaque niveau d'alerte */
@@ -26,6 +28,7 @@ export const ALERT_LEVEL_HELP: Record<string, string> = {
   alert: "Un signal anormal s'est confirmé sur deux images successives.",
   strong_alert:
     "Une perte de vigueur (feuillage et chlorophylle en baisse ensemble) s'est confirmée sur deux images successives.",
+  besoin_non_couvert: "La culture a reçu moins d'eau que son besoin.",
 };
 
 export const alertLevelStyle = (severity: string): AlertLevelStyle =>
