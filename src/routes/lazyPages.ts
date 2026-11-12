@@ -42,11 +42,12 @@ const loaders = {
   forgotPassword: withUpdateGuard(() => import("../pages/ForgotPasswordPage")),
   dashboard: withUpdateGuard(() => import("../pages/DashboardPage")),
   crops: withUpdateGuard(() => import("../pages/CropsPage")),
-  employees: withUpdateGuard(() => import("../pages/EmplyeesPage")),
+  employees: withUpdateGuard(() => import("../pages/EmployeesPage")),
   profile: withUpdateGuard(() => import("../pages/ProfilePage")),
   climate: withUpdateGuard(() => import("../pages/ClimatePage")),
   irrigation: withUpdateGuard(() => import("../pages/IrrigationPage")),
   conditions: withUpdateGuard(() => import("../pages/ConditionsPage")),
+  alerts: withUpdateGuard(() => import("../pages/AlertsPage")),
 };
 
 export const LoginPage = lazy(loaders.login);
@@ -59,6 +60,7 @@ export const ProfilePage = lazy(loaders.profile);
 export const ClimatePage = lazy(loaders.climate);
 export const IrrigationPage = lazy(loaders.irrigation);
 export const ConditionsPage = lazy(loaders.conditions);
+export const AlertsPage = lazy(loaders.alerts);
 
 /** Préchargement d'une page par son adresse, ex. au survol d'un lien */
 const BY_PATH: Record<string, () => Promise<PageModule>> = {
@@ -69,6 +71,7 @@ const BY_PATH: Record<string, () => Promise<PageModule>> = {
   "/climat": loaders.climate,
   "/irrigation": loaders.irrigation,
   "/climat-cultures": loaders.conditions,
+  "/alertes": loaders.alerts,
 };
 
 /** Pages principales, préchargées discrètement après l'ouverture */

@@ -234,3 +234,45 @@ export interface ParcelVegetation {
     water: ClimateBetween | null;
   } | null;
 }
+
+// ======================================================================
+// Onglet Rapports
+// ======================================================================
+
+export interface ReportAlert {
+  type: string;
+  severity_label: string;
+  crop_label: string | null;
+  cause: string | null;
+  evidence: string | null;
+  opened: string | null;
+  closed: string | null;
+  resolution_label: string | null;
+}
+
+export interface ReportWatering {
+  date: string | null;
+  equipment: string | null;
+  volume_l: number | null;
+  crop_label: string;
+  employees: string[];
+}
+
+/** Le rapport mensuel d'une parcelle : il rassemble les résultats des autres onglets */
+export interface ParcelReport {
+  parcel_id: number;
+  parcel_name: string;
+  farm_id: number;
+  farm_name: string | null;
+  month: string;
+  generated_on: string;
+  /** Dernier jour de météo enregistré */
+  weather_until: string | null;
+  crops: { crop_id: number; label: string }[];
+  polyculture: boolean;
+  climate: MonthConditions;
+  impacts: ParcelImpacts;
+  vegetation: ParcelVegetation;
+  alerts: ReportAlert[];
+  waterings: ReportWatering[];
+}

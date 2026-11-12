@@ -15,6 +15,7 @@ const PAGE_LABELS: Record<string, string> = {
   "/climat": "Projection climatique",
   "/irrigation": "Irrigation",
   "/climat-cultures": "Climat et cultures",
+  "/alertes": "Alertes",
 };
 
 /**

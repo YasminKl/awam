@@ -17,6 +17,7 @@ import {
   RegisterPage,
   IrrigationPage,
   ConditionsPage,
+  AlertsPage,
 } from './routes/lazyPages';
 import { preloadMainPagesWhenIdle } from './routes/preload';
 
@@ -49,6 +50,7 @@ export default function App() {
               <Route path="/climat" element={<ProtectedRoute><ClimatePage /></ProtectedRoute>} />
               <Route path="/irrigation" element={<ProtectedRoute><IrrigationPage /></ProtectedRoute>} />
               <Route path="/climat-cultures" element={<ProtectedRoute><ConditionsPage /></ProtectedRoute>} />
+              <Route path="/alertes" element={<ProtectedRoute><AlertsPage /></ProtectedRoute>} />
               <Route
                 path="/"
                 element={
