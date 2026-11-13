@@ -3,6 +3,7 @@ import { conditionsService } from "../../Services/conditionsService";
 import { useToast } from "../../hooks/useToast";
 import type { ParcelReport, VegetationIndex } from "../../types/conditions";
 import MonthNav from "./MonthNav";
+import RiskFactorSheet from "../Risk/RiskFactorSheet";
 import { MONTH_NAMES, PARAMETER_INFO, PARAMETER_ORDER, fmt } from "./parameterInfo";
 
 const INDICES: { key: VegetationIndex; label: string }[] = [
@@ -222,11 +223,12 @@ export default function ReportsTab({ farmId, parcelId }: { farmId: number; parce
             })()
           )}
 
-          {/* ---- 5. Alertes ---- */}
+                    {/* ---- 5. Alertes ---- */}
           <div style={sectionTitle}>5 · Alertes du mois</div>
           {report.alerts.length === 0 ? (
             <p style={note}>Aucune alerte pendant ce mois.</p>
           ) : (
+            <>
             <Table
               head={["Alerte", "Culture", "Ouverte", "Clôturée", "Raison"]}
               rows={report.alerts.map((a) => [
@@ -237,6 +239,16 @@ export default function ReportsTab({ farmId, parcelId }: { farmId: number; parce
                 a.resolution_label ?? "—",
               ])}
             />
+            {report.alerts.filter((a) => a.factors?.decision).map((a, i) => (
+              <div key={i} style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: "#173404", marginBottom: 6 }}>
+                  Facteurs de risque — {a.type === "Besoin en eau" ? "Besoin en eau non couvert" : a.type}
+                  {a.crop_label ? ` · ${a.crop_label}` : ""}
+                </div>
+                <RiskFactorSheet f={a.factors} />
+              </div>
+            ))}
+            </>
           )}
 
           {/* ---- 6. Arrosages ---- */}

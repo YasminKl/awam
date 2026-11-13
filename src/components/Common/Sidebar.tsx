@@ -361,6 +361,20 @@ export default function Sidebar({ collapsed, onToggle, onAddFarm }: SidebarProps
           <span style={{ fontSize: 17 }}>🔔</span>
           {!collapsed && <span>Alertes</span>}
         </button>
+        
+
+        {/* ---- Facteurs de risque ---- */}
+        <button
+          type="button"
+          style={itemStyle(location.pathname === "/facteurs-risque")}
+          onClick={() => navigate("/facteurs-risque")}
+          onMouseEnter={() => preloadPath("/facteurs-risque")}
+          onFocus={() => preloadPath("/facteurs-risque")}
+          title="Facteurs de risque"
+        >
+          <span style={{ fontSize: 17 }}>🌡️</span>
+          {!collapsed && <span>Facteurs de risque</span>}
+        </button>
 
         {/* ---- Projection climatique ---- */}
         <button

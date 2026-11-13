@@ -6,15 +6,16 @@ import { SelectionProvider } from "../context/SelectionContext";
 import { useSelection } from "../hooks/useSelection";
 import { useToast } from "../hooks/useToast";
 import { alertService } from "../Services/alertService";
-import { ALERT_TYPE_SATELLITE, ALERT_TYPE_WATER, type Alert, type AlertsOverview } from "../types/alert";
+import { ALERT_TYPE_SATELLITE, ALERT_TYPE_VEGETATION, ALERT_TYPE_WATER, type Alert, type AlertsOverview } from "../types/alert";
 import { alertLevelStyle, formatAlertDate } from "../utils/alertLevels";
 
-type TypeFilter = "all" | typeof ALERT_TYPE_WATER | typeof ALERT_TYPE_SATELLITE;
+type TypeFilter = "all" | typeof ALERT_TYPE_WATER | typeof ALERT_TYPE_SATELLITE | typeof ALERT_TYPE_VEGETATION;
 
 /** Les types d'alertes : icône et nom */
 const TYPES: Record<string, { icon: string; label: string }> = {
   [ALERT_TYPE_WATER]: { icon: "💧", label: "Besoin en eau" },
   [ALERT_TYPE_SATELLITE]: { icon: "🛰️", label: "Diagnostic satellitaire" },
+  [ALERT_TYPE_VEGETATION]: { icon: "🛰️", label: "Anomalie de végétation" },
 };
 const typeOf = (a: Alert) => TYPES[a.alert_type] ?? { icon: "🔔", label: a.message };
 
@@ -46,13 +47,16 @@ function Kpi({ label, value, alert }: { label: string; value: number; alert?: bo
 }
 
 function AlertsContent({ showFarmForm, onCloseFarmForm }: { showFarmForm: boolean; onCloseFarmForm: () => void }) {
-  const { refreshFarms } = useSelection();
+  const { refreshFarms, farms: allFarms, parcels: allParcels } = useSelection();
+  /** La ferme de chaque parcelle : une alerte est rattachée à sa ferme par sa parcelle */
+  const farmOfParcel = useMemo(() => new Map(allParcels.map((p) => [p.id, p.farm_id])), [allParcels]);
   const { showToast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const [data, setData] = useState<AlertsOverview | null>(null);
   const [type, setType] = useState<TypeFilter>("all");
   const [farm, setFarm] = useState<string>("all");
+  const [parcel, setParcel] = useState<string>("all");
   const [view, setView] = useState<"active" | "closed">("active");
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -81,12 +85,25 @@ function AlertsContent({ showFarmForm, onCloseFarmForm }: { showFarmForm: boolea
     }
   }, [data, requestedId, location.key]);
 
-  const farms = useMemo(() => {
-    const all = [...(data?.active ?? []), ...(data?.closed ?? [])];
-    return Array.from(new Map(all.filter((a) => a.farm_id).map((a) => [String(a.farm_id), a.farm_name ?? ""])).entries());
-  }, [data]);
+  /** Toutes les fermes de l'utilisateur */
+  const farms = useMemo(() => allFarms.map((f) => [String(f.id), f.name] as const), [allFarms]);
 
-  const keep = (a: Alert) => (type === "all" || a.alert_type === type) && (farm === "all" || String(a.farm_id) === farm);
+  /** Les parcelles de la ferme choisie */
+  const parcels = useMemo(
+    () => allParcels.filter((p) => farm === "all" || String(p.farm_id) === farm).map((p) => [String(p.id), p.nom] as const),
+    [allParcels, farm],
+  );
+
+  const keep = (a: Alert) =>
+    (type === "all" || a.alert_type === type) &&
+    (farm === "all" || String(farmOfParcel.get(a.parcel_id) ?? a.farm_id) === farm) &&
+    (parcel === "all" || String(a.parcel_id) === parcel);
+
+  /** Vers la fiche des facteurs de risque de l'alerte */
+  const showFactors = (a: Alert) =>
+    navigate("/facteurs-risque", {
+      state: { alertId: a.id, month: a.created_at.slice(0, 7), farmId: a.farm_id, parcelId: a.parcel_id },
+    });
 
   const resolve = async (a: Alert, resolution: "treated" | "false_alarm") => {
     setBusyId(a.id);
@@ -128,6 +145,16 @@ function AlertsContent({ showFarmForm, onCloseFarmForm }: { showFarmForm: boolea
     </button>
   );
 
+
+  /** Les listes ferme et parcelle : même forme que les filtres de type, toujours sur fond blanc */
+  const selectStyle = (chosen: boolean): React.CSSProperties => ({
+    fontSize: 12.5, borderRadius: 999, padding: "5px 12px", cursor: "pointer", fontFamily: "inherit",
+    border: `1px solid ${chosen ? "#1b4332" : "#d1d5db"}`,
+    background: "#fff", color: chosen ? "#1b4332" : "#4b5563", fontWeight: chosen ? 600 : 400,
+    outlineColor: "#1b4332",
+  });
+
+
   const active = (data?.active ?? []).filter(keep);
   const closed = (data?.closed ?? []).filter(keep);
 
@@ -152,14 +179,27 @@ function AlertsContent({ showFarmForm, onCloseFarmForm }: { showFarmForm: boolea
             {chip("all", "Toutes")}
             {chip(ALERT_TYPE_WATER, `${TYPES[ALERT_TYPE_WATER].icon} ${TYPES[ALERT_TYPE_WATER].label}`)}
             {chip(ALERT_TYPE_SATELLITE, `${TYPES[ALERT_TYPE_SATELLITE].icon} ${TYPES[ALERT_TYPE_SATELLITE].label}`)}
+            {chip(ALERT_TYPE_VEGETATION, `${TYPES[ALERT_TYPE_VEGETATION].icon} ${TYPES[ALERT_TYPE_VEGETATION].label}`)}
             <select
               value={farm}
-              onChange={(e) => setFarm(e.target.value)}
+              onChange={(e) => {
+                setFarm(e.target.value);
+                setParcel("all");
+              }}
               aria-label="Ferme"
-              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 12.5, fontFamily: "inherit" }}
+              style={selectStyle(farm !== "all")}
             >
               <option value="all">Toutes les fermes</option>
               {farms.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            </select>
+            <select
+              value={parcel}
+              onChange={(e) => setParcel(e.target.value)}
+              aria-label="Parcelle"
+              style={selectStyle(parcel !== "all")}
+            >
+              <option value="all">Toutes les parcelles</option>
+              {parcels.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
             </select>
             <div style={{ display: "inline-flex", marginLeft: "auto", border: "1px solid #d1d5db", borderRadius: 8, overflow: "hidden" }}>
               {(["active", "closed"] as const).map((v) => (
@@ -191,7 +231,8 @@ function AlertsContent({ showFarmForm, onCloseFarmForm }: { showFarmForm: boolea
                 active.map((a) => {
                   const t = typeOf(a);
                   const lv = alertLevelStyle(a.severity);
-                  const satellite = a.alert_type === ALERT_TYPE_SATELLITE;
+                  // Alertes du satellite (diagnostic et anomalie de végétation) : détail dépliable, intervention
+                  const satellite = a.alert_type !== ALERT_TYPE_WATER;
                   const expanded = expandedId === a.id;
                   return (
                     <div key={a.id} ref={(el) => { rowRefs.current[a.id] = el; }} style={{ borderTop: "1px solid #eef0ee" }}>
@@ -205,7 +246,7 @@ function AlertsContent({ showFarmForm, onCloseFarmForm }: { showFarmForm: boolea
                         )}
                         <div style={{ flex: 1, minWidth: 220 }}>
                           <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>
-                            {t.icon} {t.label} — {a.crop_label ?? "Culture"}
+                            {t.icon} {t.label} — {a.crop_label ?? "Toute la parcelle"}
                           </div>
                           <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
                             {a.farm_name} · {a.parcel_name} · ouverte le {formatAlertDate(a.created_at)}
@@ -220,6 +261,7 @@ function AlertsContent({ showFarmForm, onCloseFarmForm }: { showFarmForm: boolea
                           <button type="button" style={primary} onClick={() => plan(a)}>
                             {satellite ? "Planifier une intervention" : "Planifier un arrosage"}
                           </button>
+                          <button type="button" style={button} onClick={() => showFactors(a)}>⚖️ Facteurs de risque</button>
                           <button type="button" style={button} disabled={busyId === a.id} onClick={() => resolve(a, "treated")}>Traitée</button>
                           <button type="button" style={button} disabled={busyId === a.id} onClick={() => resolve(a, "false_alarm")}>Fausse alerte</button>
                         </div>
@@ -255,7 +297,7 @@ function AlertsContent({ showFarmForm, onCloseFarmForm }: { showFarmForm: boolea
                         <tr key={a.id}>
                           <td style={td}>{typeOf(a).icon} {typeOf(a).label}</td>
                           <td style={td}>{a.farm_name} · {a.parcel_name}</td>
-                          <td style={td}>{a.crop_label ?? "—"}</td>
+                          <td style={td}>{a.crop_label ?? "Toute la parcelle"}</td>
                           <td style={td}>{formatAlertDate(a.created_at)}</td>
                           <td style={td}>{formatAlertDate(a.resolved_at)}</td>
                           <td style={td}>{a.resolution_label ?? "—"}</td>

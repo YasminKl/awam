@@ -10,11 +10,12 @@
  *   (app/services/water_alert_service.py), vérifié chaque matin ;
  *     besoin_non_couvert → « Besoin non couvert »
  */
-export type AlertSeverity = "alert" | "strong_alert" | "besoin_non_couvert";
+export type AlertSeverity = "alert" | "strong_alert" | "besoin_non_couvert" | "anomalie_vegetation";
 
 /** Types d'alertes */
 export const ALERT_TYPE_SATELLITE = "diagnostic_satellite";
 export const ALERT_TYPE_WATER = "besoin_eau";
+export const ALERT_TYPE_VEGETATION = "anomalie_vegetation";
 
 /** Raison de fermeture */
 export type AlertResolution = "treated" | "false_alarm" | "auto";
