@@ -30,6 +30,8 @@ function sinceLabel(iso?: string | null): string {
  * suffit pas (daltonisme, écran au soleil sur le terrain). Le panneau se met
  * à jour en temps réel (événement « alerts » envoyé par le back).
  */
+/** Les alertes de la plus récente à la plus ancienne, par date d'ouverture */
+const newestFirst = (list: Alert[]) => [...list].sort((a, b) => b.created_at.localeCompare(a.created_at));
 export default function AlertsBell() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -39,7 +41,7 @@ export default function AlertsBell() {
 
   const refresh = useCallback(() => {
     alertService.count().then((r) => setCount(r.open)).catch(() => {});
-    if (open) alertService.list("open").then(setAlerts).catch(() => setAlerts([]));
+    if (open) alertService.list("open").then((l) => setAlerts(newestFirst(l))).catch(() => setAlerts([]));
   }, [open]);
 
   // Chargement, puis mise à jour en temps réel
@@ -72,7 +74,7 @@ export default function AlertsBell() {
         type="button"
         onClick={() => {
           setOpen((v) => !v);
-          if (!open) alertService.list("open").then(setAlerts).catch(() => setAlerts([]));
+          if (!open) alertService.list("open").then((l) => setAlerts(newestFirst(l))).catch(() => setAlerts([]));
         }}
         title={count ? `${count} alerte${count > 1 ? "s" : ""} en cours` : "Aucune alerte en cours"}
         aria-label={`Alertes : ${count} en cours`}

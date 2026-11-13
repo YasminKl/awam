@@ -123,15 +123,22 @@ export function SelectionProvider({ children }: SelectionProviderProps) {
     setSelectedParcelId(parcelsForSelectedFarm[0]?.id ?? null);
   }, [parcelsForSelectedFarm, selectedParcelId]);
   
-  // Parcelle demandée par la navigation : appliquée une seule fois, dès que
-  // la ferme qui la contient est sélectionnée ; ensuite, choix libre
+  // Parcelle demandée par la navigation : sa ferme est d'abord sélectionnée,
+  // même si la navigation ne l'a pas transmise, puis la parcelle, une seule
+  // fois ; ensuite, choix libre
   useEffect(() => {
     const id = pendingParcelId.current;
-    if (id !== null && parcelsForSelectedFarm.some((p) => p.id === id)) {
-      setSelectedParcelId(id);
-      pendingParcelId.current = null;
+    if (id === null) return;
+    const parcel = parcels.find((p) => p.id === id);
+    if (!parcel) return;
+    if (parcel.farm_id !== selectedFarmId) {
+      pendingFarmId.current = null;
+      setSelectedFarmId(parcel.farm_id);
+      return;
     }
-  }, [parcelsForSelectedFarm, location.key]);
+    setSelectedParcelId(id);
+    pendingParcelId.current = null;
+  }, [parcels, selectedFarmId, parcelsForSelectedFarm, location.key]);
   
   const selectedParcel = useMemo(
     () => parcels.find((p) => p.id === selectedParcelId) ?? null,

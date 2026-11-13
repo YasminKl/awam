@@ -1,3 +1,5 @@
+import type { RiskFactors } from "./risk";
+
 /** Page « Climat et cultures » : api/routes/conditions.py */
 
 export type ParameterKey =
@@ -241,6 +243,8 @@ export interface ParcelVegetation {
 
 export interface ReportAlert {
   type: string;
+  /** La fiche des facteurs de risque de l'alerte */
+  factors: RiskFactors;
   severity_label: string;
   crop_label: string | null;
   cause: string | null;

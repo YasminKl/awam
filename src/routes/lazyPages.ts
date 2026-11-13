@@ -48,6 +48,7 @@ const loaders = {
   irrigation: withUpdateGuard(() => import("../pages/IrrigationPage")),
   conditions: withUpdateGuard(() => import("../pages/ConditionsPage")),
   alerts: withUpdateGuard(() => import("../pages/AlertsPage")),
+  risks: withUpdateGuard(() => import("../pages/RiskFactorsPage")),
 };
 
 export const LoginPage = lazy(loaders.login);
@@ -61,6 +62,7 @@ export const ClimatePage = lazy(loaders.climate);
 export const IrrigationPage = lazy(loaders.irrigation);
 export const ConditionsPage = lazy(loaders.conditions);
 export const AlertsPage = lazy(loaders.alerts);
+export const RiskFactorsPage = lazy(loaders.risks);
 
 /** Préchargement d'une page par son adresse, ex. au survol d'un lien */
 const BY_PATH: Record<string, () => Promise<PageModule>> = {
@@ -72,6 +74,7 @@ const BY_PATH: Record<string, () => Promise<PageModule>> = {
   "/irrigation": loaders.irrigation,
   "/climat-cultures": loaders.conditions,
   "/alertes": loaders.alerts,
+  "/facteurs-risque": loaders.risks,
 };
 
 /** Pages principales, préchargées discrètement après l'ouverture */
