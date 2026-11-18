@@ -36,6 +36,8 @@ export default function EmployeeFormModal({ isOpen, onClose, farmId, farmName, l
   const [role, setRole] = useState<FarmEmployeeRole>("membre");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  /** Employé inactif : il reste membre, son rôle ne peut pas être changé */
+  const inactive = link?.employee.is_active === false;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -131,17 +133,32 @@ export default function EmployeeFormModal({ isOpen, onClose, farmId, farmName, l
 
         <div style={dialogCard(PEOPLE.tint)}>
           <div style={dialogSection(PEOPLE.text)}><span aria-hidden>🧑‍🌾</span> Rôle dans la ferme</div>
-          <select
-            value={role}
-            onChange={(e) => setRole(e.target.value as FarmEmployeeRole)}
-            disabled={submitting}
-            aria-label="Rôle dans la ferme"
-            style={{ ...dialogInput, marginTop: 0 }}
-          >
-            <option value="membre">Membre</option>
-            <option value="coordinateur">Coordinateur</option>
-          </select>
-          {role === "coordinateur" && (
+          {inactive ? (
+            // Employé inactif : rôle affiché, grisé, sans liste déroulante
+            <div
+              aria-label="Rôle dans la ferme"
+              style={{ ...dialogInput, marginTop: 0, background: "#f3f4f6", color: "#6b7280", cursor: "not-allowed" }}
+            >
+              Membre
+            </div>
+          ) : (
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value as FarmEmployeeRole)}
+              disabled={submitting}
+              aria-label="Rôle dans la ferme"
+              style={{ ...dialogInput, marginTop: 0 }}
+            >
+              <option value="membre">Membre</option>
+              <option value="coordinateur">Coordinateur</option>
+            </select>
+          )}
+          {inactive && (
+            <p style={hintStyle}>
+              Employé inactif : il reste membre. Réactivez-le pour changer son rôle.
+            </p>
+          )}
+          {!inactive && role === "coordinateur" && (
             <p style={hintStyle}>
               Un seul coordinateur par ferme : l'actuel coordinateur de {farmName} repassera membre.
             </p>
