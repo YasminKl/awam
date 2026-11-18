@@ -140,16 +140,12 @@ export default function TaskFormModal({
         });
         showToast("success", "Tâche modifiée.");
       } else {
-        const main = await activityService.create({
+        // La tâche et ses tâches attachées sont enregistrées ensemble : toutes, ou aucune
+        await activityService.create({
           parcel_id: parcelId, activity_type: taskType, status: "a_realiser", planned_for: date,
           planned_time: time ? `${time}:00` : null, ...common,
+          attached: attached.map((a) => ({ activity_type: a.type, planned_for: a.date })),
         });
-        for (const a of attached) {
-          await activityService.create({
-            parcel_id: parcelId, activity_type: a.type, status: "a_realiser", planned_for: a.date,
-            parent_id: main.id, ...common,
-          });
-        }
         showToast(
           "success",
           attached.length

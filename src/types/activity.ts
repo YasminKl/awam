@@ -46,6 +46,12 @@ export interface ActivityCreatePayload {
   team?: string | null;
   parent_id?: number | null;
   employee_ids: number[];
+  /**
+   * Tâches attachées, créées en même temps que celle-ci : elles reprennent
+   * sa parcelle, sa culture, son équipe et ses employés. Toutes sont
+   * enregistrées, ou aucune.
+   */
+  attached?: { activity_type: string; planned_for: string }[];
 }
 
 export interface ActivityUpdatePayload {
