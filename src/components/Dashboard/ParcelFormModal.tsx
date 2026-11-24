@@ -99,6 +99,10 @@ export default function ParcelFormModal({
       setError("Le nom est requis.");
       return;
     }
+    if (name.length > 100) {
+      setError("Le nom ne doit pas dépasser 100 caractères.");
+      return;
+    }
     // Même limite que la base : 100 caractères pour chacun de ces champs
     if (form.culture_type.trim().length > 100) {
       setError("La liste des cultures dépasse 100 caractères : retirez une culture.");
@@ -201,11 +205,16 @@ export default function ParcelFormModal({
             type="text"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
-            maxLength={150}
+            maxLength={100}
             disabled={submitting}
             placeholder="Ex. Kemel 1"
             style={dialogInput}
           />
+          {form.name.length >= 100 && (
+            <span style={{ display: "block", fontSize: 11, color: "#b91c1c", marginTop: 3 }}>
+              100 caractères maximum.
+            </span>
+          )}
         </label>
 
         {/* Cultures : choix dans le référentiel, plusieurs possibles */}

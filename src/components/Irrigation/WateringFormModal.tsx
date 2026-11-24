@@ -169,7 +169,10 @@ export default function WateringFormModal({
   const save = async () => {
     if (!day) return setError("Indiquez la date.");
     if (done) {
+      // Un arrosage fait a eu lieu : aujourd'hui ou avant
+      if (day > isoDay(new Date())) return setError("La date réelle ne peut pas être dans le futur.");
       if (!time) return setError("Indiquez l'heure de réalisation.");
+      if (day === isoDay(new Date()) && time > nowTime()) return setError("L'heure réelle ne peut pas être dans le futur.");
       if (employeeIds.length === 0) return setError("Indiquez au moins un employé qui a fait l'arrosage.");
       if (method === "duree" && startTime && endTime && !minutesBetween(startTime, endTime)) {
         return setError("L'heure de fin doit être après l'heure de début.");
@@ -262,11 +265,23 @@ export default function WateringFormModal({
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
           <label style={dialogLabel}>
             {done ? "Date réelle *" : "Date prévue *"}
-            <input type="date" value={day} onChange={(e) => setDay(e.target.value)} style={dialogInput} />
+            <input
+              type="date"
+              value={day}
+              max={done ? isoDay(new Date()) : undefined}
+              onChange={(e) => setDay(e.target.value)}
+              style={dialogInput}
+            />
           </label>
           <label style={dialogLabel}>
             {done ? "Heure *" : "Heure"}
-            <input type="time" value={time} onChange={(e) => setTime(e.target.value)} style={dialogInput} />
+            <input
+              type="time"
+              value={time}
+              max={done && day === isoDay(new Date()) ? nowTime() : undefined}
+              onChange={(e) => setTime(e.target.value)}
+              style={dialogInput}
+            />
           </label>
           <label style={dialogLabel}>
             Culture
