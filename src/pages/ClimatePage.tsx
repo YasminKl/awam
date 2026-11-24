@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import DashboardLayout from "../components/Dashboard/DashboardLayout";
 import FarmFormModal from "../components/Dashboard/FarmFormModal";
-import ClimateComparison from "../components/Climate/ClimateComparison";
+import ClimateKpiCards from "../components/Climate/ClimateKpiCards";
+import ClimateDeficitChart from "../components/Climate/ClimateDeficitChart";
+import ClimateYearsChart from "../components/Climate/ClimateYearsChart";
 import ClimatePeriods from "../components/Climate/ClimatePeriods";
 import ClimateSiteFormModal from "../components/Climate/ClimateSiteFormModal";
 import { SelectionProvider } from "../context/SelectionContext";
@@ -254,7 +256,13 @@ function ClimateContent() {
                   </div>
                 ))}
                 <div style={card}>
-                  <ClimateComparison summary={summary} />
+                  <ClimateKpiCards summary={summary} />
+                </div>
+                <div style={card}>
+                  <ClimateDeficitChart years={summary.years} />
+                </div>
+                <div style={card}>
+                  <ClimateYearsChart years={summary.years} />
                 </div>
                 <div style={card}>
                   <ClimatePeriods periods={summary.periods} />
