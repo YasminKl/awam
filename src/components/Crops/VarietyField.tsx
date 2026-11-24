@@ -2,6 +2,8 @@ import { useState } from "react";
 import type { VarietyOption } from "../../types/crop";
 
 const OTHER = "__autre__";
+/** Même limite que la base (colonne crop.variety, 100 caractères) */
+const MAX_LENGTH = 100;
 
 interface VarietyFieldProps {
   /** Variétés proposées pour l'espèce ; vide = saisie libre directe */
@@ -30,22 +32,34 @@ export default function VarietyField({
   const names = varieties.map((v) => v.name);
   // Mode « Autre » : la valeur saisie n'est pas dans la liste
   const [other, setOther] = useState(value !== "" && !names.includes(value));
+  // Limite atteinte : le champ s'arrête, un message l'explique
+  const limitReached =
+    value.length >= MAX_LENGTH ? (
+      <span style={{ display: "block", fontSize: 11, color: "#b91c1c", marginTop: 3 }}>
+        {MAX_LENGTH} caractères maximum.
+      </span>
+    ) : null;
 
   if (varieties.length === 0) {
     return (
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={disabled}
-        placeholder="Variété (facultatif)"
-        style={style}
-      />
+      <>
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          placeholder="Variété (facultatif)"
+          maxLength={MAX_LENGTH}
+          style={style}
+        />
+        {limitReached}
+      </>
     );
   }
 
   if (other) {
     return (
+      <>
       <div style={{ display: "flex", gap: 4 }}>
         <input
           type="text"
@@ -53,6 +67,7 @@ export default function VarietyField({
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
           placeholder="Autre variété"
+          maxLength={MAX_LENGTH}
           autoFocus
           style={{ ...style, flex: 1 }}
         />
@@ -77,6 +92,8 @@ export default function VarietyField({
           ↺
         </button>
       </div>
+      {limitReached}
+      </>
     );
   }
 

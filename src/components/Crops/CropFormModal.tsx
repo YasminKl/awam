@@ -390,6 +390,8 @@ export default function CropFormModal({
           ? "indiquez la date de récolte réelle."
           : row.status === "harvested" && (yieldValue === null || yieldValue <= 0)
           ? "indiquez la quantité récoltée (nombre supérieur à 0)."
+          : row.density.trim() && !(Number(row.density.replace(",", ".")) > 0)
+          ? "la densité doit être un nombre supérieur à 0."
           : datesError(row);
       if (problem) {
         setOpenKey(row.key);
@@ -600,6 +602,7 @@ export default function CropFormModal({
               Densité (plants/ha)
               <input
                 type="number"
+                min={1}
                 value={row.density}
                 onChange={(e) => updateRow(row.key, { density: e.target.value })}
                 disabled={submitting}
