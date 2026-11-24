@@ -11,6 +11,12 @@ import { teamLabel } from "../../utils/teams";
 import BusyLabel from "../Common/BusyLabel";
 
 
+
+/** Types de tâche qui marquent une récolte (mêmes que le back, task_types.HARVEST_TYPES) */
+const HARVEST_TYPES = ["recolte", "récolte", "harvest", "coupe"];
+
+
+
 interface TaskFormModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -124,7 +130,11 @@ export default function TaskFormModal({
     if (!date) return setError("Indiquez la date prévue.");
     if (checked.size === 0) return setError("Cochez au moins un employé.");
     if (attached.some((a) => !a.type || !a.date)) return setError("Complétez ou retirez les tâches attachées.");
-
+    // Une récolte ou une coupe concerne une culture précise : les cultures de la parcelle ne se récoltent pas en même temps
+    const harvest = (t: string) => HARVEST_TYPES.includes(t.trim().toLowerCase());
+    if (!cropId && (harvest(taskType) || attached.some((a) => harvest(a.type))))
+      return setError("Choisissez la culture récoltée : une récolte ou une coupe concerne une seule culture.");
+    
     const common = {
       crop_id: cropId ? Number(cropId) : null,
       team: team || null,

@@ -13,6 +13,10 @@ import AnalysisFields, {
   type AnalysisFormState,
 } from "./AnalysisFields";
 import BusyLabel from "../Common/BusyLabel";
+import { useSelection } from "../../hooks/useSelection";
+import { useConfirm } from "../../hooks/useConfirm";
+import { reverseRegion } from "../../utils/geocode";
+import { getCentroid } from "../../utils/geo";
 
 
 
@@ -66,6 +70,8 @@ export default function ParcelFormModal({
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { farms } = useSelection();
+  const confirm = useConfirm();
 
   useEffect(() => {
     if (parcel && isOpen) {
@@ -93,8 +99,49 @@ export default function ParcelFormModal({
       setError("Le nom est requis.");
       return;
     }
+    // Même limite que la base : 100 caractères pour chacun de ces champs
+    if (form.culture_type.trim().length > 100) {
+      setError("La liste des cultures dépasse 100 caractères : retirez une culture.");
+      return;
+    }
+    if (form.soil_type.trim().length > 100 || form.irrigation_type.trim().length > 100) {
+      setError("Le type de sol et l'irrigation ne doivent pas dépasser 100 caractères.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
+
+    // Nouvelle parcelle : est-elle dans le même gouvernorat que sa ferme ?
+    // Sinon, un avertissement demande de confirmer (dessin au mauvais endroit ?)
+    if (isCreate) {
+      const farm = farms.find((f) => f.id === farmId);
+      const center = getCentroid(geometry);
+      if (farm?.latitude != null && farm?.longitude != null && center) {
+        const farmRegion = await reverseRegion(farm.latitude, farm.longitude);
+        // Nominatim : une demande par seconde au plus
+        await new Promise((resolve) => setTimeout(resolve, 1100));
+        const parcelRegion = farmRegion ? await reverseRegion(center.lat, center.lon) : null;
+        const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+        if (farmRegion && parcelRegion && !same(farmRegion, parcelRegion)) {
+          const go = await confirm({
+            title: "Cette parcelle est-elle au bon endroit ?",
+            message: [
+              `La parcelle se trouve dans : ${parcelRegion}.`,
+              `La ferme « ${farm.name} » se trouve dans : ${farmRegion}.`,
+              "Vérifiez qu'elle n'a pas été dessinée au mauvais endroit sur la carte.",
+            ],
+            confirmLabel: "Enregistrer quand même",
+            cancelLabel: "Annuler",
+            tone: "neutral",
+          });
+          if (!go) {
+            setSubmitting(false);
+            return;
+          }
+        }
+      }
+    }
+
     const fields = {
       name,
       culture_type: form.culture_type.trim() || null,
@@ -154,6 +201,7 @@ export default function ParcelFormModal({
             type="text"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
+            maxLength={150}
             disabled={submitting}
             placeholder="Ex. Kemel 1"
             style={dialogInput}
@@ -192,6 +240,7 @@ export default function ParcelFormModal({
                 type="text"
                 value={form.soil_type}
                 onChange={(e) => setForm({ ...form, soil_type: e.target.value })}
+                maxLength={100}
                 disabled={submitting}
                 placeholder="Ex. Sableuse"
                 style={dialogInput}
@@ -203,6 +252,7 @@ export default function ParcelFormModal({
                 type="text"
                 value={form.irrigation_type}
                 onChange={(e) => setForm({ ...form, irrigation_type: e.target.value })}
+                maxLength={100}
                 disabled={submitting}
                 placeholder="Ex. Goutte-à-goutte"
                 style={dialogInput}

@@ -11,6 +11,7 @@ import EmployeeTasksTab from "../components/Planning/EmployeeTaskTab";
 import PlanningBoard from "../components/Planning/PlanningBoard";
 import { SelectionProvider } from "../context/SelectionContext";
 import { employeeService } from "../Services/employeeService";
+import { activityService } from "../Services/activityService";
 import { farmEmployeeService } from "../Services/farmEmployeeService";
 import { taskTypeService } from "../Services/taskTypeService";
 import { useSelection } from "../hooks/useSelection";
@@ -157,12 +158,37 @@ function EmployeesContent({
     if (!selected) return;
     const name = selected.employee.full_name;
     const deactivate = selected.employee.is_active !== false;
+    // Ses tâches à venir : il en sera retiré ; celles dont il est le seul
+    // employé seront supprimées (même règle que le back)
+    let alone = 0;
+    let shared = 0;
+    if (deactivate) {
+      try {
+        const upcoming = (await activityService.employeeTasks(selected.employee.id)).filter(
+          (t) => t.status === "a_realiser"
+        );
+        alone = upcoming.filter((t) => t.employees.length <= 1).length;
+        shared = upcoming.length - alone;
+      } catch {
+        // Liste indisponible : la confirmation reste possible, sans les nombres
+      }
+    }
+    const tasksLines: string[] = [];
+    if (alone > 0)
+      tasksLines.push(
+        `${alone} tâche${alone > 1 ? "s" : ""} à venir dont il est le seul employé ${alone > 1 ? "seront supprimées" : "sera supprimée"}.`
+      );
+    if (shared > 0)
+      tasksLines.push(
+        `Il sera retiré de ${shared} tâche${shared > 1 ? "s" : ""} à venir partagée${shared > 1 ? "s" : ""} avec d'autres employés.`
+      );
     if (
       deactivate &&
 !(await confirm({
         title: `Rendre ${name} inactif ?`,
         message: [
           `Dans toutes vos fermes, il quittera son équipe${selected.role === "coordinateur" ? " et ne sera plus coordinateur" : ""}, et ne recevra plus de nouvelle tâche.`,
+          ...tasksLines,
           "Son historique est conservé, et vous pourrez le réactiver.",
         ],
         confirmLabel: "Rendre inactif",

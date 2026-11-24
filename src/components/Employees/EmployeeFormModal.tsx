@@ -61,6 +61,11 @@ export default function EmployeeFormModal({ isOpen, onClose, farmId, farmName, l
       setError("Le téléphone ne doit pas dépasser 30 caractères.");
       return;
     }
+    // Même règle que le back : chiffres, espaces et signes + ( ) - .
+    if (!/^[0-9+()\-.\s]*$/.test(phone.trim())) {
+      setError("Le téléphone ne peut contenir que des chiffres, des espaces et les signes + ( ) - .");
+      return;
+    }
 
     setSubmitting(true);
     setError(null);
