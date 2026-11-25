@@ -168,6 +168,8 @@ export default function WateringFormModal({
 
   const save = async () => {
     if (!day) return setError("Indiquez la date.");
+    // Comme une tâche planifiée : au moins un employé coché
+    if (!done && employeeIds.length === 0) return setError("Cochez au moins un employé.");
     if (done) {
       // Un arrosage fait a eu lieu : aujourd'hui ou avant
       if (day > isoDay(new Date())) return setError("La date réelle ne peut pas être dans le futur.");
@@ -370,7 +372,7 @@ export default function WateringFormModal({
 
         {/* Employés */}
         <div>
-          <div style={dialogLabel}>{done ? "Employés qui l'ont fait *" : "Employés"}</div>
+          <div style={dialogLabel}>{done ? "Employés qui l'ont fait *" : "Employés *"}</div>
           {activeEmployees.length === 0 ? (
             <p style={{ fontSize: 12, color: "#6b7280", margin: "4px 0 0" }}>Aucun employé : ajoutez-en dans la page Employés.</p>
           ) : (

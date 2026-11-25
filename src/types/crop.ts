@@ -56,6 +56,8 @@ export interface CropCreatePayload {
   yield_unit?: YieldUnit | null;
   /** Date de fin (arrachage) d'une culture « Terminée » */
   end_date?: string | null;
+  /** Employés qui ont planté : une tâche « Plantation » réalisée est créée avec la culture */
+  planting_employee_ids?: number[];
 }
 
 export interface CropUpdatePayload {
