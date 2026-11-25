@@ -8,6 +8,9 @@ import { api } from "../../Services/api";
 import { useToast } from "../../hooks/useToast";
 import { shownStatus } from "../../utils/cropStatus";
 import { useConfirm } from "../../hooks/useConfirm";
+import { useSelection } from "../../hooks/useSelection";
+import { farmEmployeeService } from "../../Services/farmEmployeeService";
+import type { FarmEmployee } from "../../types/farmEmployee";
 import BusyLabel from "../Common/BusyLabel";
 
 
@@ -69,6 +72,8 @@ interface CropRow {
   needs_preview: boolean;
   /** Raison de l'absence de récolte prévue (verger pas en production…) */
   preview_reason: string | null;
+  /** Employés qui ont planté : s'il y en a, une tâche « Plantation » est créée */
+  planting_employees: number[];
 }
 
 /** Récolte prévue calculée par le back (GET /api/crops/expected-harvest). */
@@ -121,6 +126,7 @@ const newRow = (code: string): CropRow => ({
   notes: "",
   needs_preview: false,
   preview_reason: null,
+  planting_employees: [],
 });
 
 /** Ligne d'une culture suivie, champs remplis depuis la base. */
@@ -147,6 +153,7 @@ const existingRow = (crop: Crop): CropRow => ({
   notes: crop.notes ?? "",
   needs_preview: false,
   preview_reason: null,
+  planting_employees: [],
 });
 
 /** Mois et année d'une date ISO : « 03/2010 ». */
@@ -212,6 +219,15 @@ export default function CropFormModal({
 }: CropFormModalProps) {
   const { showToast } = useToast();
   const confirm = useConfirm();
+  const { parcelsForSelectedFarm, selectedFarmId } = useSelection();
+  // Employés actifs de la ferme de la parcelle, pour la tâche de plantation
+  const [links, setLinks] = useState<FarmEmployee[]>([]);
+  const farmId = parcelsForSelectedFarm.find((p) => p.id === parcelId)?.farm_id ?? selectedFarmId;
+  useEffect(() => {
+    if (!isOpen || farmId == null) return;
+    farmEmployeeService.listByFarm(farmId).then(setLinks).catch(() => setLinks([]));
+  }, [isOpen, farmId]);
+  const activeLinks = links.filter((l) => l.employee.is_active !== false);
 
   const [species, setSpecies] = useState<SpeciesOption[]>([]);
   const [suggestions, setSuggestions] = useState<CropSuggestions | null>(null);
@@ -456,6 +472,8 @@ export default function CropFormModal({
           notes: row.notes.trim() || null,
           // Culture créée déjà terminée : sa date de fin
           ...(row.status === "ended" ? { end_date: row.end_date } : {}),
+          // Plantation enregistrée aussi comme tâche réalisée, avec ses employés
+          ...(row.planting_employees.length > 0 ? { planting_employee_ids: row.planting_employees } : {}),
           // Culture créée déjà récoltée : le back exige la date et la
           // production dès la création
           ...(harvested
@@ -727,6 +745,53 @@ export default function CropFormModal({
                   onChange={(v) => updateRow(row.key, { in_production: v })}
                   disabled={submitting}
                 />
+              </div>
+            )}
+            
+            {/* Nouvelle culture : les employés qui ont planté ; s'il y en a, la
+                plantation devient aussi une tâche réalisée, comme un arrosage */}
+            {!isExisting && (
+              <div style={{ gridColumn: "1 / -1", borderTop: "1px solid #eef0ee", paddingTop: 8 }}>
+                <div style={{ fontSize: 12, color: "#374151", fontWeight: 600 }}>Employés qui ont planté</div>
+                {activeLinks.length === 0 ? (
+                  <p style={{ ...hintStyle, margin: "4px 0 0" }}>Aucun employé actif dans cette ferme : ajoutez-en dans la page Employés.</p>
+                ) : (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                    {activeLinks.map((l) => {
+                      const on = row.planting_employees.includes(l.employee.id);
+                      return (
+                        <label
+                          key={l.employee.id}
+                          style={{
+                            display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer",
+                            border: `1px solid ${on ? "#534AB7" : "#d1d5db"}`, borderRadius: 999, padding: "4px 10px",
+                            background: on ? "#EEEDFE" : "#ffffff",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={on}
+                            onChange={() =>
+                              updateRow(row.key, {
+                                planting_employees: on
+                                  ? row.planting_employees.filter((id) => id !== l.employee.id)
+                                  : [...row.planting_employees, l.employee.id],
+                              })
+                            }
+                            disabled={submitting}
+                            style={{ accentColor: "#534AB7" }}
+                          />
+                          {l.employee.full_name}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                <p style={{ ...hintStyle, margin: "6px 0 0" }}>
+                  {row.planting_employees.length > 0
+                    ? "Une tâche « Plantation » réalisée sera ajoutée à la planification, à la date de plantation."
+                    : "Aucun employé coché : la culture est déclarée sans tâche (par exemple une ancienne plantation)."}
+                </p>
               </div>
             )}
 
