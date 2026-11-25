@@ -217,7 +217,9 @@ export default function TaskFormModal({
             Culture
             <select value={cropId} onChange={(e) => setCropId(e.target.value)} disabled={saving} style={dialogInput} aria-label="Culture">
               <option value="">Toute la parcelle</option>
-              {crops.map((c) => (
+              {/* Seulement les cultures en cours (une annuelle récoltée, une culture
+                  abandonnée ou terminée n'est plus proposée), et celle déjà choisie */}
+              {crops.filter((c) => c.status === "active" || String(c.id) === cropId).map((c) => (
                 <option key={c.id} value={c.id}>{c.species_label ?? c.species}</option>
               ))}
             </select>
